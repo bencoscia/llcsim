@@ -1,8 +1,8 @@
 Simulate Lyotropic Liquid Crystal Membranes
 ==================================
 
-analysis
-********
+#analysis # create a header
+#********
 
 .. toctree::
    :maxdepth: 2
