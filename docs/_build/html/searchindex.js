@@ -1,0 +1,1 @@
+Search.setIndex({docnames:["index"],envversion:51,filenames:["index.rst"],objects:{},objnames:{},objtypes:{},terms:{index:0,modul:0,page:0,search:0},titles:["Simulate Lyotropic Liquid Crystal Membranes"],titleterms:{analyz:[],build:[],crystal:0,document:[],dynam:[],indic:0,liquid:0,llcsim:[],lyotrop:0,lytrop:[],membran:0,molecular:[],simul:0,tabl:0,tool:[],welcom:[]}})
