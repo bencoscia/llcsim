@@ -76,6 +76,27 @@ if __name__ == "__main__":
         colors = ['xkcd:blue', 'xkcd:olive', 'xkcd:orangered', 'xkcd:magenta', 'xkcd:gold']
         names = ['Ordered Parallel Displaced', 'Ordered Sandwiched', 'Disordered Sandwiched',
                  'Disordered Parallel Displaced', 'Solvated Parallel Displaced']
+
+        # import pylab
+        #
+        # fig = pylab.figure()
+        # figlegend = pylab.figure(figsize=(7.75, 0.6))
+        # ax = fig.add_subplot(111)
+        # for i in range(5):
+        #     ax.plot(range(10), pylab.randn(10), color=colors[i], label=names[i])
+        #
+        # #lines = ax.plot(range(10), pylab.randn(10), range(10), pylab.randn(10),range(10), pylab.randn(10), range(10), pylab.randn(10), range(10), pylab.randn(10))
+        # figlegend.legend(*ax.get_legend_handles_labels(), 'best', ncol=3)
+        # fig.show()
+        # figlegend.show()
+        # fig.tight_layout()
+        # figlegend.savefig('legend.pdf')
+        #
+        # plt.show()
+        # exit()
+
+        # names = ['Parallel Displaced (d=3.7)', 'Sandwiched (d=3.7)', 'Sandwiched (d=5.0)', 'Parallel Displaced (d=5.0)',
+        #          'Solvated Parallel Displaced']
         # names = ['Dry', 'Solvated']
         # colors = ['xkcd:orange', 'xkcd:blue', 'xkcd:orange']
 
@@ -100,7 +121,8 @@ if __name__ == "__main__":
 
         outline = np.zeros([4, n, r.shape[0]*2 + 2, 2])
         for i in range(len(regions)):
-            plt.figure(i)
+            print(i)
+            fig = plt.figure(i)
             for j in range(n):
                 #plt.bar(r, results[j, i, :], bin_width, color=colors[j], alpha=1, label=names[j])
 
@@ -118,13 +140,15 @@ if __name__ == "__main__":
                     plt.plot(outline[i, j, 1:, 0], outline[i, j, 1:, 1], color=colors[j], linewidth=2,
                              label=names[j])
             # plt.title(regions[i], fontsize=14)
-            plt.legend(fontsize=11)
-            plt.ylabel('Component Number Density (number/nm$^3$)', fontsize=14)
-            plt.xlabel('Distance from pore center, r (nm)', fontsize=14)
+
+            #plt.legend()#fontsize=12)
+
+            plt.ylabel('Component Number Density \n (number/nm$^3$)', fontsize=18)
+            plt.xlabel('Distance from pore center, r (nm)', fontsize=18)
             plt.axes().tick_params(labelsize=14)
             # plt.ylim([0, 0.6])
             plt.tight_layout()
-            plt.savefig("%s_density.png" % regions[i])
+            plt.savefig("%s_density.pdf" % regions[i])
 
         plt.show()
 
@@ -173,7 +197,7 @@ if __name__ == "__main__":
             plt.bar(r, density, bin_width, color=colors[i], alpha=0.6, label=reg)
 
         np.savez_compressed("regional_density", results=results, r=r, bw=bin_width, box=t.unitcell_vectors)
-        print('Arrays saved as density.npz')
+        print('Arrays saved as regional_density.npz')
 
         if args.solvate:
 
@@ -200,7 +224,7 @@ if __name__ == "__main__":
 
         for i in range(results.shape[0]):
             plt.bar(r, results[i, :], bw, color=colors[i], alpha=0.75, label=regions[i])
-
+    exit()
     un_normalize = np.zeros_like(results)
 
     annulus_area = []

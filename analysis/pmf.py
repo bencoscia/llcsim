@@ -8,7 +8,9 @@ from llcsim.setup.residue_topology import Residue
 from llcsim.analysis import Atom_props
 import matplotlib.pyplot as plt
 import warnings
+
 warnings.simplefilter(action='ignore', category=FutureWarning)
+
 
 def initialize():
 
@@ -153,53 +155,72 @@ class Umbrellas(object):
         # read pullx files and store com location with each frame
         # do the first one outside of the loop so we can intialize com_dist array to be the right size
         pullx = []
-        with open('%s_0_pullx.xvg' % basename, 'r') as f:
+        with open('%s_1_pullx.xvg' % basename, 'r') as f:
             for line in f:
                 if line[0] != '#' and line[0] != '@':
                     pullx.append(line)
 
-        self.nres = len(pullx[0].split()) - 1  # first column is time. The rest are for each pull group
+        # first column is time. Two columns per pull group (absolute distance, z-component distance)
+        self.nres = (len(pullx[0].split()) - 1) // 2
 
         self.com_dist = np.zeros([self.K, self.nres, len(pullx)])  # initialize
+
+        c = []
+        with open('centers.txt', 'r') as f:
+            for line in f:
+                c.append(line)
+
+        initial_com = np.zeros([self.K, self.nres])
+        for i in range(1, self.K + 1):
+            initial_com[i - 1, :] = c[i].split()
+
+        # ref = ['C', 'C1', 'C2', 'C3', 'C4', 'C5']
+        # t = md.load('long_1.trr', top='long_1.gro')
+        # ref_atoms = [a.index for a in t.topology.atoms if a.name in ref and 1369 <= a.index < 2055]
+        # eth = [a.index for a in t.topology.atoms if a.residue.name == 'ETH']
+        # eth_names = [a.name for a in t.topology.atoms if a.residue.name == 'ETH']
+        # w = [Atom_props.mass[a] for a in eth_names]
+        # eth = eth[:9]
+        # w = w[:9]
+        #
+        # ref_com = np.zeros([t.n_frames])
+        # eth_com = np.zeros([t.n_frames])
+        # for i in range(t.n_frames):
+        #     ref_com[i] = np.mean(t.xyz[i, ref_atoms, 2])
+        #     for j in range(9):
+        #         eth_com[i] += w[j]*t.xyz[i, eth[j], 2]
+        #     eth_com[i] /= sum(w)
+        #
+        # plt.hist(np.abs(eth_com - ref_com), bins=25)
+        # plt.show()
+        #
+        # exit()
 
         print('Reading pullx files...', end='', flush=True)
         for i in range(self.K):
             if i != 0:
                 pullx = []
-                with open('%s_%d_pullx.xvg' % (basename, i), 'r') as f:
+                with open('%s_%d_pullx.xvg' % (basename, i + 1), 'r') as f:
                     for line in f:
                         if line[0] != '#' and line[0] != '@':
                             pullx.append(line)
             for j in range(self.com_dist.shape[2]):
-                self.com_dist[i, :, j] = pullx[j].split()[1:]
-        print('Done!')
+                self.com_dist[i, :, j] = pullx[j].split()[2::2]  # extract COM dZ
 
-        layers = np.array([0.2827, 0.6453, 1.12610003, 1.62843333, 1.98863332, 2.46396668, 2.86146666, 3.25720001,
-                           3.72156667, 4.17230001, 4.75486663, 5.17436667, 5.6058, 6.07550001, 6.48299999, 6.98549995,
-                           7.4425333, 7.75879997, 8.14633336, 7.5983333])
-        between = np.array([(layers[i] + layers[i - 1])/2 for i in range(1, layers.size)])
+        self.com_dist += initial_com[:, :, None]  # add initial com location to properly space apart histograms
 
         colors = ['aqua', 'blue', 'coral', 'crimson', 'darkgreen', 'gold', 'lavender', 'magenta', 'orangered', 'plum',
                   'teal', 'violet']
         self.centers = self.com_dist[:, :, 0]
+
         for i in range(self.K):
             plt.hist(self.com_dist[i, 0, :], bins=50, color=colors[i])
-            #plt.plot([self.centers[i, 0], self.centers[i, 0]], [0, 20000], '--', color=colors[i])
+            plt.plot([self.centers[i, 0], self.centers[i, 0]], [0, 10000], '--', color=colors[i])
             # print(np.mean(self.com_dist[i, 0, :]))
             # print(np.std(self.com_dist[i, 0, :]))
 
-        for i in range(layers.size):
-            plt.plot([layers[i], layers[i]], [0, 20000], color='black')
-
-        for i in range(between.size):
-            plt.plot([between[i], between[i]], [0, 20000], '--', color='black')
-
-
-        # plt.hist(self.com_dist[3, 0, :], bins=50, color=colors[3])
-        # plt.plot([self.centers[3, 0], self.centers[3, 0]], [0, 20000], '--', color=colors[3])
-        # plt.title('k = 62.4')
-        # print(np.std(self.com_dist[3, 0, :]))
         plt.show()
+        exit()
 
         self.N = np.zeros([self.K, self.nres], dtype=int)  # number of uncorrelated frames for each trajectory
         self.u_kn = np.zeros_like(self.com_dist)

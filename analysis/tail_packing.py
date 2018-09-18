@@ -89,7 +89,7 @@ def nearest_neighbors(arr, d, lower_limit=0.4):
         frame = arr[t, :, :]
         for i in tqdm.tqdm(list(range(npts))):
             others = np.delete(frame, i, 0)  # delete self entry or else the nearest neighbor is itself
-            nn = spatial.KDTree(others).query(frame[i, :])[1]  # find index of nearest neighbor
+            nn = spatial.cKDTree(others).query(frame[i, :])[1]  # find index of nearest neighbor
             index = np.where(frame == others[nn])  # find the index in others corresponding to nn in arr
             ld = np.linalg.norm(frame[i, :] - frame[index[0][0]])  # calc linear distance between position and nearest neighbor
             while ld <= d:  # make sure its within d and then keep finding nearest neighbors within this range
@@ -212,6 +212,7 @@ if __name__ == "__main__":
     plt.ylabel('Normalized frequency', fontsize=14)
     plt.axes().tick_params(labelsize=14)
     plt.tight_layout()
+    plt.savefig('hexagonal_tail_packing.pdf')
     plt.show()
     exit()
     if args.fit:

@@ -279,6 +279,7 @@ class SimulationMdp(object):
             f.write('pull = yes\n')
             f.write('pull-ngroups = %d\n' % (len(ref_groups) + len(coord_groups)))
             f.write('pull-ncoords = %d\n' % len(coord_groups))
+            f.write('pull-print-components = yes\n')  # print distance from com with sign
             for i, x in enumerate(coord_groups):
                 num = i + 1
                 f.write('pull-group%d-name = %s\n' % (num, x))

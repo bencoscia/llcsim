@@ -50,6 +50,10 @@ analysis_scripts = ['Atom_props.py',
                     'top.py',
                     'torsions.py',
                     'water_content.py',
+                    '2DSAXS.py',
+                    '2D-SAXS.png',
+                    'WAXS.py',
+                    'WAXS.npy'
                    ]
 
 # scripts from llclib (~/PycharmProjects/GitHub/llclib)

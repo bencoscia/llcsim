@@ -27,7 +27,7 @@ def initialize():
                         'will be used to define the pore region')
     parser.add_argument('-pr', '--pore_radius', default=0.5, type=float, help='Max distance from pore center a water '
                         'molecule can exist in order to be counted as inside the pore')
-    parser.add_argument('-b', '--bounds', default=3, type=float, help='Distance from z-center up until which all atoms '
+    parser.add_argument('-b', '--bounds', default=5, type=float, help='Distance from z-center up until which all atoms '
                                                                       'will be included in calculation (nm)')
     parser.add_argument('-natoms', default=137, type=int, help='Number of atoms in monomer residue (not including ions '
                                                                ' if they are separate residues!')
@@ -39,6 +39,9 @@ def initialize():
     parser.add_argument('-begin', default=0, type=int, help='Start Frame')
     parser.add_argument('--single_frame', action='store_true', help='Specify this flag in order to analyze a single'
                                                                     '.gro file. No statistics will be generated')
+    parser.add_argument('--tcl', action='store_true', help='Create .tcl file that create representation of water within'
+                                                           'pore region. Use vmd *.gro -e *.tcl. Only designed for use'
+                                                           'with a single frame')
 
     args = parser.parse_args()
 
@@ -102,7 +105,7 @@ def restrict_spline(full_spline, bounds):
     return np.array(restricted)
 
 
-def water_content(pos, ref_pos, r):
+def water_content(pos, ref_pos, r, write=False):
     """
     Find number of water molecules in region
     :param pos: positions of all water molecules (excluding those outside boundaries defined by args.bounds)
@@ -112,13 +115,18 @@ def water_content(pos, ref_pos, r):
     """
 
     n = 0
+    ndx = []
     tree = spatial.cKDTree(ref_pos)
     for i in range(pos.shape[0]):
         d = tree.query(pos[i, :])[0]
         if d < r:
             n += 1
+            ndx.append(i + 1)
 
-    return n
+    if write:
+        return n, ndx
+    else:
+        return n
 
 
 def bootstrap(data, tau, nboot):
@@ -131,7 +139,6 @@ def bootstrap(data, tau, nboot):
 
     tau = int(tau)
     nsub = data.shape[0] // tau  # number of uncorrelated subtrajectories to break data into
-    print(nsub)
 
     # divide data into independent subtrajectories
     subtrajectories = np.zeros([nsub, tau])
@@ -157,12 +164,13 @@ if __name__ == "__main__":
 
     args = initialize()
 
-    print('Loading trajectory...')
+    print('Loading trajectory...', flush=True, end='')
     if args.single_frame:
         t = md.load(args.gro)
     else:
         t = md.load(args.traj, top=args.gro)[args.begin:]
     print('Done!')
+
     pos = t.xyz
     box = t.unitcell_vectors
     res = np.array([a.residue.name for a in t.topology.atoms])
@@ -192,6 +200,7 @@ if __name__ == "__main__":
         full_pore_spline = trace_pores(pos[f, pores, :], box[f, :, :], 20)
 
         spline = restrict_spline(full_pore_spline, [lower_bound, upper_bound])
+
         # spline_names = ['NA' for i in range(spline.shape[0])]
         # ids = list(np.concatenate((ids, spline_names), axis=0))
         # res = list(np.concatenate((res, spline_names), axis=0))
@@ -200,7 +209,19 @@ if __name__ == "__main__":
         # file_rw.write_gro_pos(positions, 'test.gro', ids=ids, res=res, box=box_gromacs)
         # exit()
 
-        n_water_pore = water_content(pos[f, water, :], spline, args.pore_radius)
+        if args.single_frame and args.tcl:
+            n_water_pore, water_indices = water_content(pos[f, water, :], spline, args.pore_radius, write=True)
+
+            with open('vis.tcl', 'w') as fi:
+                fi.write('mol modselect 0 0 all\n')
+                fi.write('mol showrep 0 0 0\n')
+                fi.write('mol addrep 0\n')
+                fi.write('mol modselect 1 0 serial ')
+                for i in np.array(water)[water_indices]:
+                    fi.write('%d ' % i)
+                fi.write('\nmol modstyle 1 0 CPK 2 0.3 12 12')
+        else:
+            n_water_pore = water_content(pos[f, water, :], spline, args.pore_radius)
         #n_water_tail = water_content(pos[f, water, :], pos[f, all_tail_atoms, :], args.tail_radius)
 
         # if n_water_pore + n_water_tail > len(water):

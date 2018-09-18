@@ -140,7 +140,7 @@ def avg_pore_loc(npores, pos, buffer):
 
         for j in range(npores):
             for k in range(comp_ppore*j, comp_ppore*(j + 1)):
-                p_center[:, j] += pos[:2, k]
+                p_center[:, j] += pos[k, :2]
             p_center[:, j] /= comp_ppore
 
     else:
@@ -513,9 +513,9 @@ if __name__ == '__main__':
 
     tot_atoms = np.shape(pos)[1]
     n_pores = int(args.pores)  # number of pores
-    comp_ppore = old_div(tot_atoms,n_pores)
+    comp_ppore = old_div(tot_atoms, n_pores)
 
-    p_centers = avg_pore_loc(n_pores, pos, args.buffer)
+    p_centers = (n_pores, pos, args.buffer)
     # print(p_centers[:, :, -1])
     # plt.scatter(p_centers[0, :, -1], p_centers[1, :, -1])
     # print(np.linalg.norm(p_centers[:, 0, -1] - p_centers[:, 1, -1]))

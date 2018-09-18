@@ -4,7 +4,7 @@ from llcsim.analysis import Atom_props
 import numpy as np
 import os
 import mdtraj as md
-exit()
+
 script_location = os.path.realpath(os.path.join(os.getcwd(), os.path.dirname(__file__)))
 
 

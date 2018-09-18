@@ -3,14 +3,13 @@
 import argparse
 import mdtraj as md
 import numpy as np
-from llcsim.analysis import Atom_props
+from llcsim.analysis import Atom_props, detect_peaks
 import tqdm
 import matplotlib.pyplot as plt
 from matplotlib import ticker
 from llcsim.llclib import fast_rotate
-from llcsim.sim.place_solutes import trace_pores
+from llcsim.setup.place_solutes import trace_pores
 from scipy.optimize import curve_fit
-import detect_peaks
 from scipy.interpolate import RegularGridInterpolator
 
 
@@ -21,8 +20,8 @@ def initialize():
     parser.add_argument('-t', '--traj', default='traj_whole.xtc', type=str, help='Trajectory file. Make sure to '
                                                                             'preprocess with gmx trjconv -pbc whole')
     parser.add_argument('-g', '--gro', default='wiggle.gro', type=str, help='Name of coordinate file')
-    parser.add_argument('-a', '--atoms', nargs='+', default=['C', 'C1', 'C2', 'C3', 'C4', 'C5'], help='Name of atoms to calculate'
-                        'correlation function with respect to. The center of mass will be used')
+    parser.add_argument('-a', '--atoms', nargs='+', action='append', help='Name of atoms to calculate correlation '
+                        'function with respect to. The center of mass will be used')
     parser.add_argument('-r', '--res', help='Residue to create correlation function with respect to. Will use center of'
                                             'mass. Will override atoms. NOT IMPLEMENTED YET')
     parser.add_argument('--itp', default='/home/bcoscia/PycharmProjects/GitHub/HII/top/Monomer_Tops/NAcarb11V.itp')
@@ -53,9 +52,7 @@ def initialize():
                                                              'factor')
     parser.add_argument('-fit', action="store_true", help='Fit decaying exponential function to correlation function')
 
-    args = parser.parse_args()
-
-    return args
+    return parser
 
 
 def com(pos, mass):
@@ -66,17 +63,18 @@ def com(pos, mass):
     :return: trajectory of center of mass coordinates
     """
 
-    n = len(mass)  # number of atoms
-    nT = pos.shape[0]  # number of frames
-    ncom = int(pos.shape[1]/n)  # number of centers of mass to calculate at each frame
-    mres = np.sum(mass)
+    ngrps = len(mass)
+    n = [len(i) for i in mass]
+    ndx = [sum(n[:i]) for i in range(len(n))]
 
-    centers = np.zeros([pos.shape[0], ncom, 3])  # will hold positions of all centers of masses
+    nmon = pos.shape[1] // sum(n)  # number of monomers
+    centers = np.zeros([pos.shape[0], nmon*ngrps, 3])  # total number of center of masses
 
-    for f in range(pos.shape[0]):  # loop through all trajectory frames
-        for i in range(ncom):
-            w = (pos[f, i*n:(i+1)*n, :].T * mass).T  # weight each atom in the residue by its mass
-            centers[f, i, :] = np.sum(w, axis=0) / mres  # sum the coordinates and divide by the mass of the residue
+    for f in range(pos.shape[0]):
+        for i in range(nmon):
+            for g in range(ngrps):
+                w = (pos[f, i*sum(n) + ndx[g]:i*sum(n) + ndx[g] + n[g], :].T * mass[g]).T
+                centers[f, ngrps*i + g, :] = np.sum(w, axis=0) / sum(mass[g])
 
     return centers
 
@@ -131,70 +129,70 @@ def exponential_decay(x, a, L):
     return 1 + a*np.exp(-x/L)
 
 
-def angle_average(X, Y, Z, SF, ucell=None):
-
-    ES = RegularGridInterpolator((X, Y, Z), SF, bounds_error=False)
-
-    THETA_BINS_PER_INV_ANG = 20.
-    MIN_THETA_BINS = 10  # minimum allowed bins
-    RBINS = 100
-
-    if ucell is not None:
-
-        a1 = ucell[0]
-        a2 = ucell[1]
-        a3 = ucell[2]
-
-        b1 = (np.cross(a2, a3)) / (np.dot(a1, np.cross(a2, a3)))
-        b2 = (np.cross(a3, a1)) / (np.dot(a2, np.cross(a3, a1)))
-        b3 = (np.cross(a1, a2)) / (np.dot(a3, np.cross(a1, a2)))
-
-        b_inv = np.linalg.inv(np.vstack((b1, b2, b3)))
-
-    ZBINS = Z.shape[0]  # 400
-
-    XR = (X[-1] - X[0])
-    YR = (Y[-1] - Y[0])
-
-    Rmax = min(XR, YR) / 2.0
-    Rmax *= 0.95
-
-    rarr, rspace = np.linspace(0.0, Rmax, RBINS, retstep=True)
-    zar = np.linspace(Z[0], Z[-1], ZBINS)
-
-    oa = np.zeros((rarr.shape[0], zar.shape[0]))
-    circ = 2.*np.pi*rarr  # circumference
-
-    for ir in tqdm.tqdm(range(rarr.shape[0])):
-
-        NTHETABINS = max(int(THETA_BINS_PER_INV_ANG*circ[ir]), MIN_THETA_BINS)  #calculate number of bins at this r
-        thetas = np.linspace(0.0, np.pi*2.0, NTHETABINS, endpoint=False)  # generate theta array
-
-        t, r, z = np.meshgrid(thetas, rarr[ir], zar)  # generate grid of cylindrical points
-
-        xar = r*np.cos(t)  # set up x,y coords
-        yar = r*np.sin(t)
-
-        pts = np.vstack((xar.ravel(), yar.ravel(), z.ravel())).T  # reshape for interpolation
-
-        if ucell is not None:
-            # pts = mc_inv(pts, ucell)
-            pts = np.matmul(pts, b_inv)
-
-        oa[ir, :] = np.average(ES(pts).reshape(r.shape), axis=1)  # store average values in final array
-
-    mn = np.nanmin(oa)
-    oa = np.where(np.isnan(oa), mn, oa)
-
-    rad_avg = np.average(oa)  # ???
-    oa /= rad_avg  # normalize
-
-    # set up data for contourf plot by making it symmetrical
-    final = np.append(oa[::-1, :], oa[1:], axis=0)  # SF
-    rfin = np.append(-rarr[::-1], rarr[1:])  # R
-    zfin = np.append(z[:, 0, :], z[1:, 0, :], axis=0)  # Z
-
-    return final, rfin, zfin
+# def angle_average(X, Y, Z, SF, ucell=None):
+#
+#     ES = RegularGridInterpolator((X, Y, Z), SF, bounds_error=False)
+#
+#     THETA_BINS_PER_INV_ANG = 20.
+#     MIN_THETA_BINS = 10  # minimum allowed bins
+#     RBINS = 100
+#
+#     if ucell is not None:
+#
+#         a1 = ucell[0]
+#         a2 = ucell[1]
+#         a3 = ucell[2]
+#
+#         b1 = (np.cross(a2, a3)) / (np.dot(a1, np.cross(a2, a3)))
+#         b2 = (np.cross(a3, a1)) / (np.dot(a2, np.cross(a3, a1)))
+#         b3 = (np.cross(a1, a2)) / (np.dot(a3, np.cross(a1, a2)))
+#
+#         b_inv = np.linalg.inv(np.vstack((b1, b2, b3)))
+#
+#     ZBINS = Z.shape[0]  # 400
+#
+#     XR = (X[-1] - X[0])
+#     YR = (Y[-1] - Y[0])
+#
+#     Rmax = min(XR, YR) / 2.0
+#     Rmax *= 0.95
+#
+#     rarr, rspace = np.linspace(0.0, Rmax, RBINS, retstep=True)
+#     zar = np.linspace(Z[0], Z[-1], ZBINS)
+#
+#     oa = np.zeros((rarr.shape[0], zar.shape[0]))
+#     circ = 2.*np.pi*rarr  # circumference
+#
+#     for ir in tqdm.tqdm(range(rarr.shape[0])):
+#
+#         NTHETABINS = max(int(THETA_BINS_PER_INV_ANG*circ[ir]), MIN_THETA_BINS)  #calculate number of bins at this r
+#         thetas = np.linspace(0.0, np.pi*2.0, NTHETABINS, endpoint=False)  # generate theta array
+#
+#         t, r, z = np.meshgrid(thetas, rarr[ir], zar)  # generate grid of cylindrical points
+#
+#         xar = r*np.cos(t)  # set up x,y coords
+#         yar = r*np.sin(t)
+#
+#         pts = np.vstack((xar.ravel(), yar.ravel(), z.ravel())).T  # reshape for interpolation
+#
+#         if ucell is not None:
+#             # pts = mc_inv(pts, ucell)
+#             pts = np.matmul(pts, b_inv)
+#
+#         oa[ir, :] = np.average(ES(pts).reshape(r.shape), axis=1)  # store average values in final array
+#
+#     mn = np.nanmin(oa)
+#     oa = np.where(np.isnan(oa), mn, oa)
+#
+#     rad_avg = np.average(oa)  # ???
+#     oa /= rad_avg  # normalize
+#
+#     # set up data for contourf plot by making it symmetrical
+#     final = np.append(oa[::-1, :], oa[1:], axis=0)  # SF
+#     rfin = np.append(-rarr[::-1], rarr[1:])  # R
+#     zfin = np.append(z[:, 0, :], z[1:, 0, :], axis=0)  # Z
+#
+#     return final, rfin, zfin
 
 
 def autocorrelation(x, largest_prime=500):
@@ -232,9 +230,139 @@ def autocorrelation(x, largest_prime=500):
     return auto / np.arange(n, 0, -1)
 
 
+def angle_average(X, Y, Z, SF, ucell=None, NBR=80, rmax=-1, zbins=-1, zmax=-1):
+
+    ES = RegularGridInterpolator((X, Y, Z), SF, bounds_error=False)
+
+    THETA_BINS_PER_INV_ANG = 20.
+    MIN_THETA_BINS = 10  # minimum allowed bins
+    RBINS = NBR
+
+    if ucell is not None:
+
+        a1 = ucell[0]
+        a2 = ucell[1]
+        a3 = ucell[2]
+
+        b1 = (np.cross(a2, a3)) / (np.dot(a1, np.cross(a2, a3)))
+        b2 = (np.cross(a3, a1)) / (np.dot(a2, np.cross(a3, a1)))
+        b3 = (np.cross(a1, a2)) / (np.dot(a3, np.cross(a1, a2)))
+
+        b_inv = np.linalg.inv(np.vstack((b1, b2, b3)))
+
+    if zbins == -1:
+        ZBINS = Z.shape[0]  # 400
+    else:
+        ZBINS = zbins
+
+    if zmax == -1:
+        ZMAX = Z[-1]
+    else:
+        ZMAX = zmax
+
+    XR = (X[-1] - X[0])
+    YR = (Y[-1] - Y[0])
+
+    if rmax == -1:
+        Rmax = min(XR, YR) / 2.0
+        Rmax *= 0.95
+    else:
+        Rmax = rmax
+
+    rarr, rspace = np.linspace(0.0, Rmax, RBINS, retstep=True)
+    #zar = np.linspace(Z[0], Z[-1], ZBINS)
+    zar = np.linspace(-ZMAX, ZMAX, ZBINS)
+
+    oa = np.zeros((rarr.shape[0], zar.shape[0]))
+
+    circ = 2.*np.pi*rarr  # circumference
+
+    for ir in range(rarr.shape[0]):
+
+        NTHETABINS = max(int(THETA_BINS_PER_INV_ANG*circ[ir]), MIN_THETA_BINS)  #calculate number of bins at this r
+        thetas = np.linspace(0.0, np.pi*2.0, NTHETABINS, endpoint=False)  # generate theta array
+
+        t, r, z = np.meshgrid(thetas, rarr[ir], zar)  # generate grid of cylindrical points
+
+        xar = r*np.cos(t)  # set up x,y coords
+        yar = r*np.sin(t)
+
+        pts = np.vstack((xar.ravel(), yar.ravel(), z.ravel())).T  # reshape for interpolation
+
+        if ucell is not None:
+            # pts = mc_inv(pts, ucell)
+            pts = np.matmul(pts, b_inv)
+
+        oa[ir, :] = np.average(ES(pts).reshape(r.shape), axis=1)  # store average values in final array
+
+    mn = np.nanmin(oa)
+    oa = np.where(np.isnan(oa), mn, oa)
+
+    rad_avg = np.average(oa)  # ???
+    oa /= rad_avg  # normalize
+
+    # set up data for contourf plot by making it symmetrical
+    final = np.append(oa[::-1, :], oa[1:], axis=0)  # SF
+    rfin = np.append(-rarr[::-1], rarr[1:])  # R
+    zfin = np.append(z[:, 0, :], z[1:, 0, :], axis=0)  # Z
+
+    return final, rfin, zfin
+
+
+def mc_inv(D, ucell):
+
+    a1 = ucell[0]
+    a2 = ucell[1]
+    a3 = ucell[2]
+
+    b1 = (np.cross(a2, a3))/(np.dot(a1, np.cross(a2, a3)))
+    b2 = (np.cross(a3, a1))/(np.dot(a2, np.cross(a3, a1)))
+    b3 = (np.cross(a1, a2))/(np.dot(a3, np.cross(a1, a2)))
+
+    b_inv = np.linalg.inv(np.vstack((b1, b2, b3)))
+    Dnew = np.zeros_like(D)
+
+    X = D[..., 0]
+    Y = D[..., 1]
+    Z = D[..., 2]
+
+    for ix in range(D.shape[0]):
+        Dnew[ix, 0:3] += X[ix]*b_inv[0]
+
+    for iy in range(D.shape[0]):
+        Dnew[iy, 0:3] += Y[iy]*b_inv[1]
+
+    for iz in range(D.shape[0]):
+        Dnew[iz, 0:3] += Z[iz]*b_inv[2]
+
+    return Dnew
+
+
+def rescale(coords, dims):
+    """
+    rescale coordinates so that cell dimensions are constant over the simulation
+    returns rescaled coordinates and average length
+    """
+
+    avgdims = np.average(dims, axis=0)
+    a = avgdims / dims
+    rc = coords
+
+    for it in range(rc.shape[0]):
+        for i in range(3):
+            rc[it, :, i] *= a[it, i]
+
+    # dr = old_div(avgdims,Nspatialgrid)
+
+    return rc, avgdims
+
+
 if __name__ == "__main__":
 
-    args = initialize()
+    args = initialize().parse_args()
+
+    if args.atoms is None:
+        args.atoms = [['C', 'C1', 'C2', 'C3', 'C4', 'C5']]
 
     npores = 4
 
@@ -263,13 +391,17 @@ if __name__ == "__main__":
             t = md.load(args.gro)
             print('Configuration loaded')
         else:
-            t = md.load(args.traj, top=args.gro)[args.begin:]
+            t = md.load(args.traj, top=args.gro)[args.begin:-1]
             print('Trajectory loaded')
 
-        if args.atoms[0] == 'all':
+        if args.atoms[0][0] == 'all':
             mass = [Atom_props.mass[a.name] for a in t.topology.atoms]
         else:
-            mass = [Atom_props.mass[i] for i in args.atoms]  # mass of reference atoms
+            mass = []
+            for i, grp in enumerate(args.atoms):
+                mass.append([])
+                for x in grp:
+                    mass[i].append(Atom_props.mass[x])
 
         L = np.zeros([3])  # average box vectors in each dimension
         for i in range(3):
@@ -288,10 +420,15 @@ if __name__ == "__main__":
                 hist_range.append([-L[i], L[i]])
         ###################### 3D center of mass #########################
 
-        if args.atoms[0] == 'all':
+        if args.atoms[0][0] == 'all':
             keep = [a.index for a in t.topology.atoms]
         else:
-            keep = [a.index for a in t.topology.atoms if a.name in args.atoms]  # indices of atoms to keep
+            keep = []
+            for grp in args.atoms:
+                for a in t.topology.atoms:
+                    if a.name in grp:
+                        keep.append(a.index)
+            # keep = [a.index for a in t.topology.atoms if a.name in args.atoms]  # indices of atoms to keep
             # keep = [a.index for a in t.topology.atoms if a.residue.name == 'HOH' and a.name == 'O']  # indices of atoms to keep
 
         pore_spline = np.zeros([t.n_frames, npores*args.layers, 3])
@@ -352,20 +489,153 @@ if __name__ == "__main__":
                             # plt.show()
 
         else:
-            for frame in tqdm.tqdm(range(frames), unit='Frame'):
-                for p in range(npores):
-                    for l in range(args.layers):
-                        for a in range(monomers_per_layer):
-                            pt = p*com_per_pore + l*monomers_per_layer + a  # index of center of mass reference point
-                            translated = periodic_pts[frame, :, :] - periodic_pts[frame, pt, :]  # make pt the origin
-                            H, edges = np.histogramdd(translated, bins=bins, range=hist_range)
-                            correlation += H
+            # for frame in tqdm.tqdm(range(frames), unit='Frame'):
+            #     for p in range(npores):
+            #         for l in range(args.layers):
+            #             for a in range(monomers_per_layer):
+            #                 pt = p*com_per_pore + l*monomers_per_layer + a  # index of center of mass reference point
+            #                 translated = periodic_pts[frame, :, :] - periodic_pts[frame, pt, :]  # make pt the origin
+            #                 H, edges = np.histogramdd(translated, bins=bins, range=hist_range)
+            #                 correlation += H
                             # middle_x = bins[0] // 2
                             # middle_y = bins[1] // 2
                             # #plt.plot(H[middle_x, middle_y, :])
                             # plt.plot(correlation[middle_x, middle_y, :])
                             # plt.show()
 
+            # convert unit cell -- can be made more general
+            theta = 2*np.pi / 3  # hard-coded = bad
+            ucell = np.array([[1, 0, 0], [np.cos(theta), np.sin(theta), 0], [0, 0, 1]])
+
+            # convert monoclinic cell to cubic cell
+            print("transforming coordinates to monoclinic cell (theta={0:f} deg)".format(theta*180.0/np.pi))
+            center_of_mass[..., 1] /= np.sin(theta)
+            center_of_mass[..., 0] -= center_of_mass[..., 1]*np.cos(theta)
+
+            L = np.linalg.norm(t.unitcell_vectors, axis=2)
+
+            locations, L = rescale(center_of_mass, L)  # make unit cell constant size
+
+            # redefine xyz values of grid
+            box = t.unitcell_vectors
+            x = np.linspace(0, L[0], int(bins[0]))
+            y = np.linspace(0, L[1], int(bins[1]))  # for converted square box, y box length is same as x
+            z = np.linspace(0, L[2], int(bins[2]))
+
+            # redefine bins
+            xbin = x[1] - x[0]
+            ybin = y[1] - y[0]
+            zbin = z[1] - z[0]
+
+            zv = [0.0, 0.0, 0.0]  # zero vector
+
+            # put all atoms inside box - works for single frame and multiframe
+            for it in range(locations.shape[0]):  # looped to save memory
+                locations[it, ...] = np.where(locations[it, ...] < L, locations[it, ...], locations[it, ...] - L)  # get positions in periodic cell
+                locations[it, ...] = np.where(locations[it, ...] > zv, locations[it, ...], locations[it, ...] + L)
+            from llcsim.llclib import file_rw
+            file_rw.write_gro_pos(center_of_mass[-1, ...], "test1.gro")
+            # fourier transform loop
+            fft = np.zeros([x.size - 1, y.size - 1, z.size - 1])
+            for frame in tqdm.tqdm(range(frames), unit='Frames'):
+                H, edges = np.histogramdd(locations[frame, ...], bins=(x, y, z))
+                fft += np.abs(np.fft.fftn(H)) ** 2
+
+            fft /= frames  # average of all frames
+
+            # invert the fourier transform back to real space
+            fft_inverse = np.fft.ifftn(fft)
+
+            # only works for z slice currently
+            centers_x = [edges[0][i] + ((edges[0][i + 1] - edges[0][i]) / 2) for i in range(fft_inverse.shape[0])]
+            centers_y = [edges[1][i] + ((edges[1][i + 1] - edges[1][i]) / 2) for i in range(fft_inverse.shape[1])]
+            centers_z = np.array([edges[2][i] + ((edges[2][i + 1] - edges[2][i]) / 2) for i in range(fft_inverse.shape[2])])
+
+            # middle_x = fft_inverse.shape[0] // 2
+            # middle_y = fft_inverse.shape[1] // 2
+
+            # restricted zdf
+            r = 0.225
+            avg = []
+            n = 0
+            for i, ix in enumerate(centers_x):
+                for j, jy in enumerate(centers_y):
+                    if np.linalg.norm([ix - np.cos(theta)*jy, jy*np.sin(theta)]) < r:
+                        avg.append([i, j])
+                        n += 1
+
+            zdf = np.zeros_like(centers_z)
+            for i in range(len(avg)):
+                zdf += fft_inverse[avg[i][0], avg[i][1], :].real
+
+            zdf = zdf[1:]  # get rid of giant spike at zero
+            zdf /= zdf.mean()
+            # zdf_full = zdf
+            zdf_full = np.mean(fft_inverse, axis=(0, 1))[1:]
+            zdf_full /= zdf_full.mean()
+
+            #plt.plot(centers_z[1:], zdf, linewidth=2)
+            plt.plot(centers_z[1:], zdf_full, linewidth=2, label='Raw data')
+
+            plt.xlim(0, 4)
+            # plt.ylim(0, 2)
+
+            start = 13
+            end = np.argmin(np.abs(np.array(centers_z) - 4))
+
+            #Fit decaying exponential to peaks of oscillating correlation function
+            peaks = detect_peaks.detect_peaks(zdf_full[start:end], mpd=12, show=False)  # adjust mpd if number of peaks comes out wrong
+            # if args.offset:
+            #     peaks = peaks[1::2]  # every other peak starting at the second peak
+            # peaks = [17, 34, 54, 74, 159] # full
+            # peaks = [17, 35, 54, 163]
+
+            peaks = [17,  37,  56,  77,  94, 115, 129, 139]  # layered 300K ordered
+            # peaks = [32, 78, 125, 165]  # offset 300K
+            # peaks = [31, 77, 119, 162]  # offset 280K
+            # peaks = [10, 30, 58, 80, 100, 118, 138, 157]  # layered 300K disordered
+            #peaks = [33, 82, 115, 148]  # offset 300K disordered
+            # peaks = [32, 82, 133]  # disorder offset
+            #print(peaks)
+            # if len(peaks) > 4:
+            #     peaks = peaks[:4]
+            peaks = np.array(peaks)
+            plt.scatter(centers_z[peaks + 1], zdf_full[peaks], marker='+', c='r', s=200, label='Peak locations')
+
+            period = 0.438
+            p = np.array([2, 10])  # initial guess at parameters
+            bounds = ([0, 0], [np.inf, np.inf])
+            solp, cov_x = curve_fit(exponential_decay, centers_z[peaks], zdf_full[peaks], p, bounds=bounds)
+
+            #plt.plot(centers_z[start:], 1 + solp[0]*np.exp(-centers_z[start:]/solp[1]))
+
+            plt.plot(centers_z[start:end], exponential_decay(np.array(centers_z[start:end]), solp[0], solp[1]), '--',
+                    color='black', label='Least squares fit')
+            print('Correlation length = %1.2f +/- %1.2f angstroms' % (10*solp[1], 10*np.sqrt(cov_x[1, 1])))
+
+            #p = [2.5, 0.4, np.pi, 0.5]  # amplitude, period, phase shift, correlation length. Pick values above what is expected
+            #bounds = ([0, 0.4, 0, 0.4], [np.inf, 0.6, np.inf, np.inf])  # bounds on fit parameters
+            #
+            # solp, pcov = curve_fit(sinusoidal_decay, centers_z[start:end], zdf_full[(start - 1):(end-1)], p, bounds=bounds)
+            # print(solp)
+            # # plot fit
+            # plt.plot(centers_z[start:end], sinusoidal_decay(np.array(centers_z[start:end]), solp[0], solp[1], solp[2], solp[3]), '--',
+            #          c='black', label='Least squares fit')
+            #
+            # # plt.plot(centers1[start:], 1 + solp[0]*np.exp(-centers1[start:]))
+            #
+            # print('Correlation length = %1.2f +/- %1.2f angstroms' % (10*solp[3], 10*np.sqrt(pcov[3, 3])))
+            # print('Oscillation Period = %1.3f +/- %1.3f angstroms' % (10*solp[1], 10*np.sqrt(pcov[1, 1])))
+
+            plt.xlabel('Z distance separation (nm)', fontsize=14)
+            plt.ylabel('Count', fontsize=14)
+            plt.axes().tick_params(labelsize=14)
+            plt.tight_layout()
+            plt.legend(loc=1, prop={'size': 16})
+            # plt.ylim(0, 1.2 * np.amax(zdf_full))
+            plt.tight_layout()
+            plt.show()
+            exit()
         if len(args.slice) > 1:
             np.savez_compressed('correlation_%s%s' % (args.slice[0], args.slice[1]), correlation=correlation, edges=edges, frames=frames, ncom=ncom)
         else:
@@ -384,7 +654,7 @@ if __name__ == "__main__":
         middle_x = correlation.shape[0] // 2
         middle_y = correlation.shape[1] // 2
         r = 0.225
-        r = 0.42
+        r = 0.5
 
         avg = []
         n = 0
@@ -448,8 +718,8 @@ if __name__ == "__main__":
             # print('Correlation length = %1.2f +/- %1.2f angstroms' % (10*solp[1], 10*np.sqrt(cov_x[1, 1])))
 
             # # fit decaying sinusoidal function to data
-            p = [2.5, 0.45, np.pi, 0.5]  # amplitude, period, phase shift, correlation length. Pick values above what is expected
-            bounds = ([0, 0.45, 0, 0.4], [np.inf, 0.6, np.inf, np.inf])  # bounds on fit parameters
+            p = [2.5, 0.4, np.pi, 0.5]  # amplitude, period, phase shift, correlation length. Pick values above what is expected
+            bounds = ([0, 0.4, 0, 0.4], [np.inf, 0.6, np.inf, np.inf])  # bounds on fit parameters
 
             solp, pcov = curve_fit(sinusoidal_decay, centers1[start:], zdf[start:], p, bounds=bounds)
             print(solp)

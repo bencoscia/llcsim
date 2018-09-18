@@ -38,15 +38,24 @@ else
     GMX="gmx"
 fi
 
+${python} ${DIR}/build2.py --no_column_shift #-pd 0.35
+
 # make input files
-${python} ${DIR}/input.py -b ${BUILD_MON} -l 50 --restraints ${restraint_residue} --temp ${T} -f 50 --genvel yes -c ${start_config}
+${python} ${DIR}/input.py -b ${BUILD_MON} -l 50 --restraints ${restraint_residue} --temp ${T} -f 50 --genvel yes -c ${start_config} -s 50000
 # create restrained topology
 
 ${python} ${DIR}/restrain.py -f 1000000 1000000 1000000 -A xyz -g ${start_config} -m ${BUILD_MON} -a ${ring_restraints}
 
-gmx grompp -f em.mdp -p topol.top -c ${start_config} -o em
+gmx grompp -f em.mdp -p topol.top -c ${start_config} -o em -r ${start_config}
 ${GMX} mdrun -v -deffnm em
-gmx grompp -f npt.mdp -p topol.top -c em.gro -o npt
+
+n=$(awk '/Potential Energy/ {print $4}' em.log)
+echo $n
+if [[ ${n:0:2} == *"."* ]]; then
+	exec equil.sh
+fi
+
+gmx grompp -f npt.mdp -p topol.top -c em.gro -o npt -r em.gro
 ${GMX} mdrun -v -deffnm npt
 
 cp npt.gro 1000000.gro
@@ -61,7 +70,7 @@ ${python} ${DIR}/input.py -b ${BUILD_MON} -l 50 --restraints ${restraint_residue
 for f in ${forces}; do
 
     ${python} ${DIR}/restrain.py -f ${f} ${f} ${f} -A xyz -g ${start_config} -m ${BUILD_MON} -a ${ring_restraints}
-    gmx grompp -f npt.mdp -p topol.top -c npt.gro -o npt
+    gmx grompp -f npt.mdp -p topol.top -c npt.gro -o npt -r npt.gro
     ${GMX} mdrun -v -deffnm npt
 
 	cp npt.gro ${f}.gro
@@ -73,6 +82,7 @@ ${python} ${DIR}/input.py -b ${BUILD_MON} -l 5000 --temp ${T} -f 50 --genvel no 
 
 gmx grompp -f npt.mdp -p topol.top -c npt.gro -o berendsen
 ${GMX} mdrun -v -deffnm berendsen
-${python} ${DIR}/input.py -b ${BUILD_MON} -l ${equil_length} --temp ${T} -f 10000 --barostat Parrinello-Rahman --genvel no -c berendsen.gro
+
+#${python} ${DIR}/input.py -b ${BUILD_MON} -l ${equil_length} --temp ${T} -f 10000 --barostat Parrinello-Rahman --genvel no -c berendsen.gro
 gmx grompp -f npt.mdp -p topol.top -c berendsen.gro -o PR
 ${GMX} mdrun -v -deffnm PR

@@ -207,12 +207,21 @@ if __name__ == "__main__":
     z = np.zeros([args.pores, args.n_configs])
     n_layers = args.n_configs // 2 + 1  # number of layers from pore spline needed
     for i in range(args.pores):
-        ndx = i * args.layers + args.ref_layer
+        ndx = i * args.layers + args.ref_layer - 1
         layer_locations = pore_spline[ndx:(ndx + n_layers), 2]
         between_layers = np.array([(layer_locations[i] + layer_locations[i - 1])/2 for i in range(1, len(layer_locations))])
         z[i, ::2] = layer_locations[:z[0, ::2].size]
         z[i, 1::2] = between_layers
     print('Success!')
+    print(z)
+    exit()
+    with open('centers.txt', 'w') as f:
+        f.write('  pore 1 |  pore 2 |  pore 3 |  pore 4\n')
+        for k in range(args.n_configs):
+            for i in range(args.pores):
+                f.write('  %.3f   ' % z[i, k])
+            f.write('\n')
+    print('Absolute starting center of mass recorded to centers.txt')
 
     # place solutes at equally spaced locations
     # zbox = system.box_vectors[2, 2]

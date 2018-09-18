@@ -11,7 +11,7 @@ import argparse
 from llcsim.setup import lc_class, bcc_class
 from llcsim.setup.gentop import SystemTopology
 from llcsim.setup.genmdp import SimulationMdp
-exit()
+
 
 def initialize():
 
