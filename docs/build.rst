@@ -6,10 +6,9 @@ build.py
    :func: initialize
    :prog: build.py
 
-genmdp.py
-===========
+.. automodule:: build
+   :members: z_correlation
 
-.. argparse::
-   :filename: ../setup/genmdp.py
-   :fun: initialize
-   :prog: genmdp.py
+.. autoclass:: build.Assembly
+   :members: align_plane, translate_to_origin, align_with_x, build_column, reorder, write_gro
+
