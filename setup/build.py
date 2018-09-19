@@ -47,10 +47,14 @@ def initialize():
 def z_correlation(z, L, v=0.1):
     """
     Calculate where to place monomers on the z-axis so that a given correlation length is obtained
-    :param z: mean z-positions where monomers will be placed with gaussian probability np.array([n_layers])
-    :param L: desired correlation length [float]
-    :param v: variance in z position of monomer head groups
-    :return: locations [np.array[nlayers])
+    
+    Args:
+        z: mean z-positions where monomers will be placed with gaussian probability np.array([n_layers])
+        L: desired correlation length [float]
+        v: variance in z position of monomer head groups
+
+    Returns:    
+        locations [np.array[nlayers])
     """
 
     n = z.shape[0]
@@ -73,14 +77,14 @@ class Assembly(LC):
 
         """Initialize geometry of columnar pore structure
 
-        Keyword arguments:
-            name -- name of monomer with which the system will be built
-            npores -- number of pores in the system
-            p2p -- absolute pore-to-pore distance
-            pore_alpha -- angle between x and y box vector. For example if pore_alpha = 120 or 60, you'll get
-            hexagonally packed pores
-            ncolumns -- number of columns surrounding each pore
-            monomers_per_column -- number of monomers in each column
+        Args:
+        :param name: Name of monomer with which the system will be built. \n
+        :param npores: Number of pores in the system.
+        :param p2p: Absolute pore-to-pore distance.
+        :param pore_alpha: Angle between x and y box vector. For example if pore_alpha = 120 or 60, you'll get
+            hexagonally packed pores.
+        :param ncolumns: Number of columns surrounding each pore.
+        :param monomers_per_column: Number of monomers in each column.
         """
 
         super().__init__(name)
@@ -134,14 +138,14 @@ class Assembly(LC):
     def build_column(self, pore, z, theta, correlation=True, var=0, correlation_length=0, pd=0, random_shift=True):
         """ Place a column at angle theta on xy plane with respect to a pore center
 
-        Keyword Arguments:
-            pore -- pore number (0 : npores - 1)
-            z -- mean z-positions of monomers in column
-            theta -- angle, with respect to pore center where column should be placed
-            correlation -- adjust z positions so there is a correlation length
-            var -- variance in multivariate normal distribution used to make correlated points
-            correlation_length -- length for which correlation between stacked monomers to persist
-            pd -- Specify a nonzero value to make a parallel displaced. The distance here (in nm) will be the distance
+        Args:
+            pore: pore number (0 : npores - 1)
+            z: mean z-positions of monomers in column
+            theta: angle, with respect to pore center where column should be placed
+            correlation: adjust z positions so there is a correlation length
+            var: variance in multivariate normal distribution used to make correlated points
+            correlation_length: length for which correlation between stacked monomers to persist
+            pd: Specify a nonzero value to make a parallel displaced. The distance here (in nm) will be the distance
             between the center of masses of two vertically stacked monomers.
         """
 
@@ -196,6 +200,7 @@ class Assembly(LC):
         self.names = [self.names[i] for i in ordered]
 
     def write_gro(self, out, ucell):
+        """ Write out final coordinates in .gro format """
 
         file_rw.write_gro_pos(self.xyz, out, ids=self.names, res=self.all_residues, ucell=ucell)
 
