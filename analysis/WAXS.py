@@ -41,13 +41,16 @@ def normalize_alkanes(R, Z, Raw_Intensity, inner, outer, angle, nbins=45):
     test *= factor
     colorbar = 'jet'
     levels = np.linspace(0, factor, 200)
-    plt.contourf(X, Y, test.T, cmap=colorbar, levels=levels, extend='max')
-    plt.colorbar(format='%.2f')
+    heatmap = plt.contourf(X, Y, test.T, cmap=colorbar, levels=levels, extend='max')
+    cbar = plt.colorbar(heatmap, format='%.1f')
+    cbar.ax.tick_params(labelsize=14)
+    cbar.set_ticks([0, 0.5, 1, 1.5, 2, 2.5, 3.1])
     plt.xlabel('$q_r\ (\AA^{-1}$)', fontsize=18)
     plt.ylabel('$q_z\ (\AA^{-1}$)', fontsize=18)
     plt.gcf().get_axes()[0].tick_params(labelsize=14)
     plt.gcf().get_axes()[0].set_aspect('equal')
     plt.tight_layout()
+    #plt.savefig('/home/bcoscia/PycharmProjects/llcsim/Ben_Manuscripts/structure_paper/figures/ralkanes.png')
 
     inds = np.digitize(angles, bins)
 
@@ -74,10 +77,11 @@ def normalize_alkanes(R, Z, Raw_Intensity, inner, outer, angle, nbins=45):
     I /= (counts*avg_intensity)
     bins -= 90
     plt.plot(np.abs(bins[::-1]), I[::-1], linewidth=2)
-    plt.xlabel('Angle with respect to $q_r=0$', fontsize=14)
-    plt.ylabel('Normalized integrated intensity', fontsize=14)
-    plt.gcf().get_axes()[0].tick_params(labelsize=14)
+    plt.xlabel('Angle with respect to $q_r=0$', fontsize=18)
+    plt.ylabel('Normalized integrated intensity', fontsize=18)
+    plt.gcf().get_axes()[0].tick_params(labelsize=18)
     plt.tight_layout()
+    #plt.savefig('/home/bcoscia/PycharmProjects/llcsim/Ben_Manuscripts/structure_paper/figures/angular_integration.pdf')
 
     return avg_intensity
 
@@ -162,16 +166,17 @@ waxs /= avg_intensity
 fig = plt.figure()
 ax = fig.add_subplot(111)
 ax.plot(X, waxs[:, waxs.shape[0]//2 + 1], linewidth=2)
-plt.gcf().get_axes()[0].tick_params(labelsize=14)
+plt.gcf().get_axes()[0].tick_params(labelsize=18)
 
 ax.annotate('R-$\pi$', xy=(-1.7, 2.5), xytext=(-1.25, 2.25), arrowprops=dict(facecolor='black', width=1, headwidth=6,
                                                                              shrink=0.2, headlength=6), fontsize=14)
 ax.annotate('R-double', xy=(-.81, .906), xytext=(-.3, 0.72), arrowprops=dict(facecolor='black', width=1, headwidth=6,
                                                                              shrink=0.15, headlength=6), fontsize=14)
 
-plt.xlabel('$q_z~(\AA)$', fontsize=14)
-plt.ylabel('Normalized Intensity', fontsize=14)
+plt.xlabel('$q_z\ (\AA^{-1})$', fontsize=18)
+plt.ylabel('Normalized Intensity', fontsize=18)
 plt.tight_layout()
+plt.savefig('/home/bcoscia/PycharmProjects/llcsim/Ben_Manuscripts/structure_paper/figures/rpi_rdouble.pdf')
 
 ################ Plot and fit lorentzian and gaussian functions to qr and qz experimental Cross-sections ##############
 
@@ -241,7 +246,7 @@ print('Average R-double intensity: %.2f' % np.mean(np.amax(waxs[R_double_bottom:
 fig, ax = plt.subplots()
 heatmap = plt.contourf(X, Y, waxs, cmap=colorbar, levels=levels)
 cid = fig.canvas.mpl_connect('button_press_event', onclick)
-cbar = plt.colorbar(format='%.2f')
+#cbar = plt.colorbar(format='%.2f')
 plt.xlabel('$q_r\ (\AA^{-1}$)', fontsize=18)
 plt.ylabel('$q_z\ (\AA^{-1}$)', fontsize=18)
 plt.gcf().get_axes()[0].tick_params(labelsize=14)
@@ -277,13 +282,16 @@ txt3.set_path_effects([PathEffects.withStroke(linewidth=lw, foreground='black')]
 txt4.set_path_effects([PathEffects.withStroke(linewidth=lw, foreground='black')])
 txt5.set_path_effects([PathEffects.withStroke(linewidth=lw, foreground='black')])
 
-cbar = plt.colorbar(heatmap, format='%.2f')
+cbar = plt.colorbar(heatmap, format='%.1f')
 tick_locator = ticker.MaxNLocator(nbins=6)
-cbar.locator = tick_locator
+cbar.ax.tick_params(labelsize=14)
+cbar.set_ticks([0, 0.5, 1, 1.5, 2, 2.5, 3.1])
 
-plt.xlabel('$q_r\ (\AA^{-1}$)', fontsize=14)
-plt.ylabel('$q_z\ (\AA^{-1}$)', fontsize=14)
-plt.gcf().get_axes()[0].tick_params(labelsize=14)
+plt.xlabel('$q_r\ (\AA^{-1}$)', fontsize=18)
+plt.ylabel('$q_z\ (\AA^{-1}$)', fontsize=18)
+plt.gcf().get_axes()[0].tick_params(labelsize=18)
 plt.gcf().get_axes()[0].set_aspect('equal')
+plt.xticks([-2, -1, 0, 1, 2])
 plt.tight_layout()
+#plt.savefig('/home/bcoscia/PycharmProjects/llcsim/Ben_Manuscripts/structure_paper/figures/WAXS_annotated_words.png')
 plt.show()

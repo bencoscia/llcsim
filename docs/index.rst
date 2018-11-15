@@ -6,6 +6,7 @@ Simulate Lyotropic Liquid Crystal Membranes
    :titlesonly:
 
    setup
+   analysis
 
 Indices and tables
 ==================

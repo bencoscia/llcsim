@@ -11,6 +11,7 @@ Classes
 =======
 
 .. autoclass:: build.Assembly
+   :show-inheritance:
    :members: __init__, align_plane, translate_to_origin, align_with_x, build_column, reorder, write_gro
 
 =========

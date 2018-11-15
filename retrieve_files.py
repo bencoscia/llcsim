@@ -28,7 +28,7 @@ setup_scripts = ['add_dummies.py',
                'setup_umbrella_configs.py',
                'solvate_equilibrated.sh',
                'solvate_equilibrated.py',
-               'xlink.sh'
+               'xlink.py'
               ]
 
 # only scripts and files for post-simulation analysis
@@ -44,7 +44,7 @@ analysis_scripts = ['Atom_props.py',
                     'Poly_fit.py',
                     'poresize.py',
                     'regional_density.py',
-                    'Structure_char.py',
+                    'p2p.py',
                     'tail_packing.py',
                     'tilt.py',
                     'top.py',
@@ -53,7 +53,10 @@ analysis_scripts = ['Atom_props.py',
                     '2DSAXS.py',
                     '2D-SAXS.png',
                     'WAXS.py',
-                    'WAXS.npy'
+                    'WAXS.npy',
+                    'structure_factor.py',
+                    'disorder.py',
+                    'compare_disorder.py'
                    ]
 
 # scripts from llclib (~/PycharmProjects/GitHub/llclib)
@@ -62,12 +65,6 @@ llclib_scripts = ['file_rw.py',
                   'physical.py',
                   'transform.py'
                   ]
-
-xlink_scripts = ['Cleanup_Top.py',
-                 'genpairs.py',
-                 'genpairs.o',
-                 'genpairs.c',
-                 'xlink.py']
 
 for i in setup_scripts:
 	subprocess.call(['cp', '%s/%s' %(setup,i), './setup'])
@@ -80,10 +77,6 @@ for i in analysis_scripts:
 for i in llclib_scripts:
 	subprocess.call(['cp', '%s/%s' %(llclib,i), './llclib'])
 	subprocess.call(['sed', '-i', '-e', "s/LLC_Membranes/llcsim/g", './llclib/%s' %i])
-
-for i in xlink_scripts:
-	subprocess.call(['cp', '%s/%s' %(xlink,i), './xlink'])
-	subprocess.call(['sed', '-i', '-e', "s/LLC_Membranes/llcsim/g", './xlink/%s' %i])
 
 subprocess.call(['cp', '-r', '%s' %topologies, './top/'])
 subprocess.call(['cp', '-r', '%s' %ff, './top/'])
