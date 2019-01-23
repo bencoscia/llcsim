@@ -130,6 +130,7 @@ def parse_txt(txt, points, times, name, std=False):
 
     return xbounds, ybounds
 
+
 if __name__ == "__main__":
 
     args = initialize()
@@ -139,7 +140,7 @@ if __name__ == "__main__":
     # pore_components = t.atom_slice(keep)  # create a new trajectory object only describing those atoms
     pos = t.xyz[:, keep, :]
 
-    pcenters = physical.avg_pore_loc(4, pos)  # find the pore centers
+    pcenters = physical.avg_pore_loc(4, pos, t.unitcell_vectors)  # find the pore centers
     radii = physical.limits(pos, pcenters)  # find the average radius of each pore in each frame
 
     r = np.zeros(radii.shape[0])  # find average pore radius at each frame

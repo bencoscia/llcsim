@@ -4,7 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-n = 2  # number of points in each direction (n**2 total points). Must be even to maintain periodicity
+n = 10  # number of points in each direction (n**2 total points). Must be even to maintain periodicity
 nbins = 101  # must be odd to center the pattern at 0
 x = np.zeros([n**2, 2])
 lxy = 4.5  # distance between hexagon points
@@ -53,10 +53,10 @@ freq_y *= 2*np.pi
 
 fig, ax = plt.subplots()
 
-ax.contourf(freq_x, freq_y, sf, 100, cmap='Greys') # gives diamonds
+#ax.contourf(freq_x, freq_y, sf, 100, cmap='Greys') # gives diamonds
 
 # imshow has best interpolation options. imshow also inverts the data, so the transpose is plotted
-#ax.imshow(sf.T, interpolation='Gaussian', extent=[freq_x[0], freq_x[-1], freq_y[0], freq_y[-1]], cmap='Greys')
+ax.imshow(sf.T, interpolation='Gaussian', extent=[freq_x[0], freq_x[-1], freq_y[0], freq_y[-1]], cmap='Greys')
 
 # plt just one hexagon by restricting axis limits
 plt.xlim(-1.8, 1.8)
@@ -66,5 +66,5 @@ plt.ylabel('$q_z$', fontsize=20)
 plt.gcf().get_axes()[0].set_aspect('equal')
 plt.gcf().get_axes()[0].tick_params(labelsize=18)
 plt.tight_layout()
-#plt.savefig('hexagonal_ft.pdf')
+plt.savefig('hexagonal_ft.pdf')
 plt.show()

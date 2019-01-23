@@ -25,8 +25,10 @@ import numpy as np
 import os
 import tqdm
 import matplotlib.pyplot as plt
+import pickle
+from llcsim.llclib import file_rw
 
-script_location = os.path.realpath(os.path.join(os.getcwd(), os.path.dirname("__file__")))
+script_location = os.path.realpath(os.path.join(os.getcwd(), os.path.dirname(__file__)))
 
 
 def initialize():
@@ -38,29 +40,53 @@ def initialize():
     parser.add_argument('-p', '--top', default='topol.top', type=str, help='Gromacs topology file')
     parser.add_argument('-b', '--begin', default=0, type=int, help='End frame')
     parser.add_argument('-e', '--end', default=-1, type=int, help='Start frame')
+    parser.add_argument('-sk', '--skip', default=1, type=int, help='Skip every skip frames')
     parser.add_argument('-x', '--exclude_water', action='store_true', help='Exclude water while searching for hbonds')
     parser.add_argument('-r', '--residues', nargs='+', default=['HII'], help='Residues to include in h-bond search. '
                         'Water is automatically included if you do not specify the -x option')
-    parser.add_argument('-a', '--atoms', action='append', nargs='+', help='Atoms for to include for each '
+    parser.add_argument('-a', '--atoms', action='append', nargs='+', help='Atoms to include for each '
                         'residue. Each list of atoms must be passed with a separate -a flag for each residue in'
                         'args.residues')
     parser.add_argument('-d', '--distance', default=.3, help='Maximum distance between acceptor and donor atoms')
     parser.add_argument('-angle', '--angle_cut', default=20, help='Maximum DHA angle to be considered an H-bond')
+    parser.add_argument('-xlink', '--xlink', action="store_true", help='Specify if system is cross-linked since'
+                                                                       'the topology will be set up')
+    parser.add_argument('-xtop', '--xlink_topology', default='assembly.itp', help='Name of .itp file which '
+                                                                                  'describes cross-linked residue')
+    parser.add_argument('-xres', '--xlink_residue', default='HII', help='Name of residue in molecules section of the '
+                                                                        'topology corresponding to args.xlink_topology')
+    parser.add_argument('-l', '--load', default=False, help='Load pickled system object')
 
     return parser
 
 
 class System(object):
 
-    def __init__(self, traj, gro, top, begin=0, end=-1, res='all', exclude_water=False):
+    def __init__(self, traj, gro, top, begin=0, end=-1, skip=1, exclude_water=False, xlink=False,
+                 xlink_topology='assembly.itp', xlink_residue='HII'):
+        """
 
-        self.top = Topology(top)
+        :param traj:
+        :param gro:
+        :param top:
+        :param begin:
+        :param end:
+        :param exclude_water:
+        :param xlink:
+        :param xlink_topology:
+        :param xlink_residue:
+        """
+
+        print('Generating bond list...', end="", flush=True)
+        self.top = Topology(top, xlink=xlink, xlink_topology=xlink_topology, xlink_residue=xlink_residue)
+        print('Done!')
 
         print('Loading trajectory...', end="", flush=True)
-        self.t = md.load(traj, top=gro)[begin:end]
+        self.t = md.load(traj, top=gro)[begin:end:skip]
         print('Done!')
         self.pos = self.t.xyz  # positions of all atoms
         self.hbonds = []  # will hold h-bonds for each frame [D, H, A, angle]
+        self.dt = self.t.time[1] - self.t.time[0]
 
         # for hbond_pairing
         # self.nwater = 0
@@ -92,6 +118,10 @@ class System(object):
         self.D = []
         self.H = []
         self.A = []
+
+        self.donor_acceptor_matrix = None
+        self.atom_to_matrix_index = {}
+        self.matrix_to_atom_index = {}
 
         if not exclude_water:
 
@@ -194,7 +224,7 @@ class System(object):
 
     def number_water_molecules(self):
         """
-        A specific form of number_residues funtion (below)
+        A specific form of number_residues function (below)
         :return:
         """
         water_numbers = {}
@@ -226,10 +256,34 @@ class System(object):
 
         return residue_numbers, nres
 
+    def save_hbonds(self, name='hbonds.pl'):
+
+        with open(name, 'wb') as f:
+            pickle.dump(self.hbonds, f)
+
+    def hbond_matrix(self):
+
+        unique_atoms = []
+        for i in range(len(self.hbonds)):
+            unique_atoms.append(np.unique(self.hbonds[i][::2, :]))
+
+        unique = np.unique(np.concatenate(unique_atoms))
+
+        for i in range(unique.size):
+            self.atom_to_matrix_index[int(unique[i])] = i
+            self.matrix_to_atom_index[i] = int(unique[i])
+
+        self.donor_acceptor_matrix = np.zeros([len(self.hbonds), unique.size])
+
+        for t in range(len(self.hbonds)):
+            hbond_frame = self.hbonds[t]
+            for i in range(hbond_frame.shape[1]):
+                self.donor_acceptor_matrix[t, self.atom_to_matrix_index[hbond_frame[0, i]]] = hbond_frame[2, i]
+
 
 class Residue(object):
 
-    def __init__(self, name):
+    def __init__(self, name, xlink=False, xlink_topology='assembly.itp'):
 
         self.name = name
 
@@ -246,20 +300,23 @@ class Residue(object):
             self.natoms = 1
 
         else:
-            try:
-                t = md.load('%s.pdb' % name,
-                            standard_names=False)  # see if there is a solute configuration in this directory
-            except OSError:
-                try:
-                    t = md.load('%s/../top/topologies/%s.pdb' % (script_location, name),
-                                standard_names=False)  # check if the configuration is
-                    # located with all of the other topologies
-                except OSError:
-                    print('No residue %s found' % name)
-                    exit()
+            # try:
+            #     t = md.load('%s.pdb' % name,
+            #                 standard_names=False)  # see if there is a solute configuration in this directory
+            # except OSError:
+            #     try:
+            #         t = md.load('%s/../top/topologies/%s.pdb' % (script_location, name),
+            #                     standard_names=False)  # check if the configuration is
+            #         # located with all of the other topologies
+            #     except OSError:
+            #         print('No residue %s found' % name)
+            #         exit()
 
             try:
-                f = open('%s.itp' % name, 'r')
+                if xlink:
+                    f = open('%s' % xlink_topology, 'r')
+                else:
+                    f = open('%s.itp' % name, 'r')
             except FileNotFoundError:
                 try:
                     f = open('%s/../top/topologies/%s.itp' % (script_location, name), 'r')
@@ -273,8 +330,6 @@ class Residue(object):
 
             f.close()
 
-            self.natoms = t.n_atoms
-
             atoms_index = 0
             while itp[atoms_index].count('[ atoms ]') == 0:
                 atoms_index += 1
@@ -283,10 +338,14 @@ class Residue(object):
             self.names = {}  # key = index, value = atom name
 
             atoms_index += 2
-            for i in range(self.natoms):
+            i = 0
+            while itp[i + atoms_index] != '\n':
                 data = itp[i + atoms_index].split()
                 self.indices[data[4]] = int(data[0])
                 self.names[int(data[0])] = data[4]
+                i += 1
+
+            self.natoms = len(self.names)
 
             # find the bonds section
             bonds_index = 0
@@ -300,10 +359,17 @@ class Residue(object):
                 bonds.append([int(bond_data[0]), int(bond_data[1])])
                 bonds_index += 1
 
+            bonds = np.array(bonds)  # converted to numpy array for use with np.where
+
             self.bonds = {}
             for i in range(self.natoms):
                 self.bonds[i] = []
-                involvement = [x for x in bonds if i + 1 in x]
+
+                # involvement = [list(x) for x in bonds if i + 1 in x]  # old (slow) way of doing this
+
+                x = np.where(bonds == i + 1)
+                involvement = [bonds[x[0][i]] for i in range(len(x[0]))]
+
                 for pair in involvement:
                     atom = [x - 1 for x in pair if x != (i + 1)][0]
                     self.bonds[i].append(atom)
@@ -311,7 +377,14 @@ class Residue(object):
 
 class Topology(object):
 
-    def __init__(self, top):
+    def __init__(self, top, xlink=False, xlink_topology='assembly.itp', xlink_residue='HII'):
+        """
+
+        :param top:
+        :param xlink:
+        :param xlink_topology:
+        :param xlink_residue:
+        """
 
         topology_file = []
         with open(top, 'r') as f:
@@ -333,7 +406,10 @@ class Topology(object):
         self.bonds = {}
         preceding_atoms = 0  # atoms before residue
         for r in self.residues:  # look at all residues
-            res = Residue(r)  # create residue object
+            if xlink and r == xlink_residue:
+                res = Residue(r, xlink=True, xlink_topology=xlink_topology)
+            else:
+                res = Residue(r)  # create residue object
             if not res.is_ion:
                 for n in range(self.residues[r]):  # create bond for each same type residue
                     for b in res.bonds:  # look at bonds to each atom in order
@@ -348,14 +424,23 @@ if __name__ == "__main__":
 
     args = initialize().parse_args()
 
-    # workaround for argparse. If default value is set, it is always included in the list with action='append'
-    if not args.atoms:
-        args.atoms = [['O3', 'O4']]  # a default value
+    if args.load:
 
-    sys = System(args.traj, args.gro, args.top, begin=args.begin, end=args.end, exclude_water=args.exclude_water)
+        sys = file_rw.load_object(args.load)
 
-    for i, r in enumerate(args.residues):
-        sys.set_eligible(r, args.atoms[i])
+    else:
+        # workaround for argparse. If default value is set, it is always included in the list with action='append'
+        if not args.atoms:
+            args.atoms = [['O3', 'O4']]  # a default value
 
-    sys.identify_hbonds(args.distance, args.angle_cut)
+        sys = System(args.traj, args.gro, args.top, begin=args.begin, end=args.end, skip=args.skip,
+                     exclude_water=args.exclude_water, xlink=args.xlink, xlink_topology=args.xlink_topology,
+                     xlink_residue=args.xlink_residue)
+
+        for i, r in enumerate(args.residues):
+            sys.set_eligible(r, args.atoms[i])
+
+        sys.identify_hbonds(args.distance, args.angle_cut)
+        file_rw.save_object(sys, 'hbonds.pl')
+
     sys.plot_hbonds()

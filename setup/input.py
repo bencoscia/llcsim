@@ -19,7 +19,6 @@ def initialize():
 
     parser.add_argument('-T', '--title', default='Generic Molecular Dynamics Simulation', type=str, help='Simulation Title')
     parser.add_argument('-b', '--build_mon', default='NAcarb11V', type=str, help='Monomer structure used for build')
-    parser.add_argument('-t', '--itp', default='dipole.itp', type=str, help='Name of .itp describing monomers')
     parser.add_argument('-s', '--em_steps', default=5000, type=int, help='Steps to take during energy minimization')
     parser.add_argument('-e', '--ensemble', default='npt', type=str, help='Thermodynamic ensemble to put system in')
     parser.add_argument('-d', '--dt', default=0.002, type=float, help='time step (ps)')
@@ -34,8 +33,7 @@ def initialize():
     parser.add_argument('--temp', default=300, help='Specify temperature at which to run simulation')
     parser.add_argument('--mdp', action="store_true", help='Only the .mdp will be written if this option is specified')
     parser.add_argument('--barostat', default='berendsen', type=str, help='pressure coupling scheme to use')
-    parser.add_argument('--genvel', default='yes', type=str, help='generate velocities according to a maxwell'
-                                                                     'distribution')
+    parser.add_argument('--nogenvel', action="store_false", help='Do not generate velocities')
     parser.add_argument('--bcc', action="store_true", help='Generate input files using bicontinuous cubic files')  # probably best to reorganize the repository
     parser.add_argument('--solvent', default='water', help='Name of solvent')
     parser.add_argument('--tau_t', default=0.1, type=float, help='Temperature coupling time constant')
@@ -53,7 +51,6 @@ def initialize():
 if __name__ == "__main__":
 
     args = initialize()
-
     # get output frequencies (important for controlling size of trajectory)
     if args.nstxout:
         nstxout = args.nstxout
@@ -77,7 +74,7 @@ if __name__ == "__main__":
 
     mdp = SimulationMdp(args.coord, title=args.title, T=args.temp, em_steps=args.em_steps,
                         time_step=args.dt, length=args.length, p_coupling=args.pcoupltype,
-                        barostat=args.barostat, genvel=args.genvel, restraints=args.restraints, xlink=args.xlink,
+                        barostat=args.barostat, genvel=args.nogenvel, restraints=args.restraints, xlink=args.xlink,
                         bcc=args.bcc, tau_p=args.tau_p, tau_t=args.tau_t, nstxout=nstxout, nstvout=nstvout,
                         nstfout=nstfout, nstenergy=nstenergy)
 

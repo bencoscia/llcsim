@@ -10,6 +10,7 @@ import numpy as np
 import copy
 import math
 import os
+import pickle
 
 
 def read_pdb_coords(file):
@@ -75,7 +76,7 @@ def write_assembly(b, output, no_mon, bcc=False, xlink=False):
         a = b
     else:
         if not bcc:
-            with open("%s/../HII/top/Monomer_Tops/%s" % (location, '%s.itp' % b), "r") as f:
+            with open("%s/../top/topologies/%s" % (location, '%s.itp' % b), "r") as f:
                 a = []
                 for line in f:
                     a.append(line)
@@ -173,11 +174,14 @@ def write_assembly(b, output, no_mon, bcc=False, xlink=False):
 
     for i in range(int(no_mon)):
         for k in range(0, ndp):
-            f.write('{:6d}{:7d}{:7d}{:7d}{:}'.format(i*nr + int(a[k + dihedrals_p_index + 3][0:6]),
-                                                   i*nr + int(a[k + dihedrals_p_index + 3][6:14]),
-                                                   i*nr + int(a[k + dihedrals_p_index + 3][14:22]),
-                                                   i*nr + int(a[k + dihedrals_p_index + 3][22:30]),
-                                                   a[k + dihedrals_p_index + 3][30:len(a[k + dihedrals_p_index + 3])]))
+            info = [int(x) for x in a[k + dihedrals_p_index + 3].split()[:5]]
+            # f.write('{:6d}{:7d}{:7d}{:7d}{:}'.format(i*nr + int(a[k + dihedrals_p_index + 3][0:6]),
+            #                                        i*nr + int(a[k + dihedrals_p_index + 3][6:14]),
+            #                                        i*nr + int(a[k + dihedrals_p_index + 3][14:22]),
+            #                                        i*nr + int(a[k + dihedrals_p_index + 3][22:30]),
+            #                                        a[k + dihedrals_p_index + 3][30:len(a[k + dihedrals_p_index + 3])]))
+            f.write('{:6d}{:7d}{:7d}{:7d}{:7d}\n'.format(i * nr + info[0], i * nr + info[1], i * nr + info[2],
+                                                         i * nr + info[3], info[4]))
 
     f.write("\n")  # space in between sections
 
@@ -187,18 +191,22 @@ def write_assembly(b, output, no_mon, bcc=False, xlink=False):
     ndimp = 0  # number of lines in the 'dihedrals ; impropers' section
     dihedrals_imp_count = dihedrals_imp_index + 3
 
-    while a[dihedrals_imp_count] != '\n':
+    while dihedrals_imp_count < len(a) and a[dihedrals_imp_count] != '\n':
         dihedrals_imp_count += 1
         ndimp += 1
 
     # Can't have any space at the bottom of the file for this loop to work
     for i in range(int(no_mon)):
         for k in range(0, ndimp):
-            f.write('{:6d}{:7d}{:7d}{:7d}{:}'.format(i*nr + int(a[k + dihedrals_imp_index + 3][0:6]),
-                                                   i*nr + int(a[k + dihedrals_imp_index + 3][6:14]),
-                                                   i*nr + int(a[k + dihedrals_imp_index + 3][14:22]),
-                                                   i*nr + int(a[k + dihedrals_imp_index + 3][22:30]),
-                                                   a[k + dihedrals_imp_index + 3][30:len(a[k + dihedrals_imp_index + 3])]))
+            info = [int(x) for x in a[k + dihedrals_imp_index + 3].split()[:5]]
+            # f.write('{:6d}{:7d}{:7d}{:7d}{:}'.format(i*nr + int(a[k + dihedrals_imp_index + 3][0:6]),
+            #                                        i*nr + int(a[k + dihedrals_imp_index + 3][6:14]),
+            #                                        i*nr + int(a[k + dihedrals_imp_index + 3][14:22]),
+            #                                        i*nr + int(a[k + dihedrals_imp_index + 3][22:30]),
+            #                                        a[k + dihedrals_imp_index + 3][30:len(a[k + dihedrals_imp_index + 3])]))
+            f.write('{:6d}{:7d}{:7d}{:7d}{:7d}\n'.format(i * nr + info[0], i * nr + info[1], i * nr + info[2],
+                                                         i * nr + info[3], info[4]))
+
     f.write("\n")  # space in between sections
 
     # [ virtual_sites4 ]
@@ -532,7 +540,7 @@ def write_gro_pos(pos, out, name='NA', box=[0, 0, 0], ids=None, res=None, vel=No
         # f.write('{:10f}{:10f}{:10f}\n'.format(0, 0, 0))
 
 
-def write_em_mdp(steps, freeze=False, freeze_group='', freeze_dim='xyz'):
+def write_em_mdp(steps, freeze=False, freeze_group='', freeze_dim='xyz', xlink=False):
     """
     Write energy minimization .mdp file
     :param steps: number of steps to take using steepest descents algorithm
@@ -562,4 +570,21 @@ def write_em_mdp(steps, freeze=False, freeze_group='', freeze_dim='xyz'):
                 dim.append('Y')
             else:
                 dim.append('N')
-            f.write('freezedim = %s %s %s' %(dim[0], dim[1], dim[2]))
+            f.write('freezedim = %s %s %s\n' %(dim[0], dim[1], dim[2]))
+
+        if xlink:
+            f.write('periodic-molecules = yes\n')
+
+
+def save_object(obj, filename):
+
+    with open(filename, 'wb') as output:  # Overwrites any existing file.
+
+        pickle.dump(obj, output, pickle.HIGHEST_PROTOCOL)
+
+
+def load_object(filename):
+
+    with open(filename, 'rb') as f:
+
+        return pickle.load(f)

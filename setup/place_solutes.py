@@ -3,8 +3,7 @@
 import argparse
 import mdtraj as md
 import numpy as np
-from llcsim.analysis import Atom_props
-from llcsim.llclib import file_rw, transform
+from llcsim.llclib import file_rw, transform, physical, topology
 from llcsim.setup.gentop import SystemTopology
 import subprocess
 import os
@@ -56,31 +55,6 @@ def concentration_to_nsolute(conc, box_vectors, solute):
     actual_concentration = nsolute / (NA*V)  # mol/L
 
     return nsolute, actual_concentration
-
-
-def random_orientation(xyz, alignment_vector, placement):
-    """
-    Randomly orient a water molecule and then place it a desired location
-    :param water_xyz: 3d coordinates of a water molecule
-    :param water_alignment_vector: A reference vector to rotate the water molecule about
-    :param placement: where to place final water configuration in space
-    :return: coordinates of oriented and translated water molecule
-    """
-
-    u = np.random.normal(size=3)  # random vector. From normal distribution since sphere
-    u /= np.linalg.norm(u)  # normalize
-
-    R = transform.Rvect2vect(alignment_vector, u)  # rotation matrix to align water_alignment_vector with u
-
-    xyz -= xyz[0, :]  # center at origin
-
-    rotated = np.zeros([xyz.shape[1], 3])
-    for i in range(xyz.shape[1]):
-        rotated[i, :] = np.dot(R, xyz[i, :])
-
-    rotated += placement  # translate to desired location
-
-    return rotated
 
 
 def net_charge(nsolute, solutes):
@@ -245,7 +219,8 @@ def placement(z, pts, box):
 
 class Solvent(object):
 
-    def __init__(self, gro, intermediate_fname='solvate.gro', em_steps=100, p_coupling='isotropic'):
+    def __init__(self, gro, intermediate_fname='solvate.gro', em_steps=100, p_coupling='isotropic', xlink=False,
+                 xlinked_topname='assembly.itp'):
         """
         :param gro: configuration of solvent
         :param intermediate_fname : name of intermediate .gro files if placing solute in box
@@ -255,6 +230,12 @@ class Solvent(object):
         self.t = md.load(gro)
         self.box_vectors = self.t.unitcell_vectors[0, :, :]  # box vectors
 
+        self.xlink = xlink
+
+        # parallelization
+        self.mpi = False  # use mpi / gpu acceleration
+        self.np = 1  # number of parallel process
+
         self.box_gromacs = [self.box_vectors[0, 0], self.box_vectors[1, 1], self.box_vectors[2, 2],
                             self.box_vectors[0, 1], self.box_vectors[2, 0], self.box_vectors[1, 0],
                             self.box_vectors[0, 2], self.box_vectors[1, 2], self.box_vectors[2, 0]]  # box in gromacs format
@@ -262,14 +243,14 @@ class Solvent(object):
         self.positions = self.t.xyz[0, :, :]  # positions of all atoms
         self.residues = []
         self.names = []
-        self.top = SystemTopology(gro)
+        self.top = SystemTopology(gro, xlink=self.xlink, xlinked_top_name=xlinked_topname)
         self.intermediate_fname = intermediate_fname
         self.em_steps = em_steps
 
         # data specifically required for adding solutes to pores
         self.pore_spline = None
         self.water = [a.index for a in self.t.topology.atoms if a.residue.name == 'HOH' and a.name == 'O']
-        self.water_top = Solute('SOL')
+        self.water_top = topology.Solute('SOL')
 
         # because mdtraj changes the names
         for a in self.t.topology.atoms:
@@ -297,16 +278,17 @@ class Solvent(object):
         :return:
         """
 
-        # p = placement_point - (solute.com - solute.xyz[0, 0, :])  # want to move com to placement point
-        #solute_positions = random_orientation(solute.xyz[0, ...], solute.xyz[0, 0, :] - solute.xyz[0, 1, :], placement_point)  # to be fixed in THE FUTURE
-        solute_positions = transform.translate(solute.xyz[0, :, :], solute.com, placement_point)  # translate solute to placement point
+        # randomly rotate the molecule and then tranlate it to the placement point
+        solute_positions = transform.random_orientation(solute.t.xyz[0, ...], solute.t.xyz[0, 0, :] -
+                                                        solute.t.xyz[0, 1, :], placement_point)
         self.positions = np.concatenate((self.positions, solute_positions))  # add to array of positions
-        self.residues += solute.residues  # add solute residues to list of all residues
-        self.names += solute.names  # add solute atom names to list of all names
+        self.residues += solute.res  # add solute residues to list of all residues
+        self.names += [solute.names.get(i) for i in range(1, solute.natoms + 1)]  # add solute atom names to all names
         self.top.add_residue(solute, write=True)  # add 1 solute to topology
 
         # write new .gro file
-        file_rw.write_gro_pos(self.positions, self.intermediate_fname, box=self.box_gromacs, ids=self.names, res=self.residues)
+        file_rw.write_gro_pos(self.positions, self.intermediate_fname, box=self.box_gromacs, ids=self.names,
+                              res=self.residues)
 
         if freeze:
             self.freeze_ndx(solute_placement_point=placement_point, res=solute.resname)
@@ -319,7 +301,11 @@ class Solvent(object):
                 self.place_solute_random(solute)
             else:
                 #self.remove_water(placement_point, 3)
-                self.place_solute(solute, placement_point, freeze=False)
+                self.place_solute(solute, placement_point, freeze=True)
+        else:
+            p3 = subprocess.Popen(["cp", "em.gro", "%s" % self.intermediate_fname])
+            p3.wait()
+            self.positions = md.load('%s' % self.intermediate_fname).xyz[0, :, :]  # update positions
 
     def place_solute_random(self, solute):
         """
@@ -340,15 +326,17 @@ class Solvent(object):
         """
 
         ref = [a.index for a in self.t.topology.atoms if a.name in ref]
+
         # redo each time because positions change slightly upon energy minimization
-        self.pore_spline = trace_pores(self.positions[ref, :], self.box_vectors[:2, :2], layers)
+        self.pore_spline = physical.trace_pores(self.positions[ref, :], self.t.unitcell_vectors[0, ...], layers,
+                                                progress=False)
 
         # format z so that it is an array
         if type(z) is float or type(z) is np.float64:
             z = np.array([z for i in range(pores)])
 
         for i in tqdm.tqdm(range(pores)):
-            placement_point = placement(z[i], self.pore_spline[i * layers: (i + 1) * layers, :], self.box_vectors[:2, :2])
+            placement_point = placement(z[i], self.pore_spline[i, ...], self.box_vectors[:2, :2])
             self.place_solute(solute, placement_point, freeze=True)
 
     def energy_minimize(self, steps, freeze=False, freeze_group='Freeze', freeze_dim='xyz'):
@@ -359,29 +347,39 @@ class Solvent(object):
         """
 
         # write em.mdp with a given number of steps
-        file_rw.write_em_mdp(steps, freeze=freeze, freeze_group='Freeze', freeze_dim='xyz')
+        file_rw.write_em_mdp(steps, freeze=freeze, freeze_group='Freeze', freeze_dim='xyz', xlink=self.xlink)
 
         if freeze:
-            p1 = subprocess.Popen(
-                ["gmx", "grompp", "-p", "topol.top", "-f", "em.mdp", "-o", "em", "-c", "%s" % self.intermediate_fname,
-                 "-n", "freeze_index.ndx"],
-                stdout=open(os.devnull, 'w'), stderr=subprocess.STDOUT)  # generate atomic level input file
-            p1.wait()
+            if self.mpi:
+                p1 = subprocess.Popen(
+                    ["mpirun", "-np", "1", "gmx_mpi", "grompp", "-p", "topol.top", "-f", "em.mdp", "-o", "em", "-c",
+                     "%s" % self.intermediate_fname, "-n", "freeze_index.ndx"], stdout=open(os.devnull, 'w'),
+                    stderr=subprocess.STDOUT)  # generate atomic level input file
+            else:
+                p1 = subprocess.Popen(
+                    ["gmx", "grompp", "-p", "topol.top", "-f", "em.mdp", "-o", "em", "-c",
+                     "%s" % self.intermediate_fname,
+                     "-n", "freeze_index.ndx"],
+                    stdout=open(os.devnull, 'w'), stderr=subprocess.STDOUT)  # generate atomic level input file
         else:
-            p1 = subprocess.Popen(
-                ["gmx", "grompp", "-p", "topol.top", "-f", "em.mdp", "-o", "em", "-c", "%s" % self.intermediate_fname],
-                stdout=open(os.devnull, 'w'), stderr=subprocess.STDOUT)  # generate atomic level input file
-            p1.wait()
+            if self.mpi:
+                p1 = subprocess.Popen(
+                    ["mpirun", "-np", "1", "gmx_mpi", "grompp", "-p", "topol.top", "-f", "em.mdp", "-o", "em", "-c",
+                     "%s" % self.intermediate_fname], stdout=open(os.devnull, 'w'), stderr=subprocess.STDOUT)  # generate atomic level input file
+                p1.wait()
+            else:
+                p1 = subprocess.Popen(
+                    ["gmx", "grompp", "-p", "topol.top", "-f", "em.mdp", "-o", "em", "-c", "%s" % self.intermediate_fname],
+                    stdout=open(os.devnull, 'w'), stderr=subprocess.STDOUT)  # generate atomic level input file
+        p1.wait()
 
-        p2 = subprocess.Popen(["gmx", "mdrun", "-deffnm", "em"], stdout=open(os.devnull, 'w'),
-                              stderr=subprocess.STDOUT)  # run energy minimization
+        if self.mpi:
+            p2 = subprocess.Popen(["mpirun", "-np", "%s" % self.np, "gmx_mpi", "mdrun", "-deffnm", "em"],
+                                  stdout=open(os.devnull, 'w'), stderr=subprocess.STDOUT)  # run energy minimization
+        else:
+            p2 = subprocess.Popen(["gmx", "mdrun", "-deffnm", "em"], stdout=open(os.devnull, 'w'),
+                                  stderr=subprocess.STDOUT)  # run energy minimization
         p2.wait()
-
-        p3 = subprocess.Popen(["cp", "em.gro", "%s" % self.intermediate_fname])
-        p3.wait()
-
-        # update positions
-        self.positions = md.load('%s' % self.intermediate_fname).xyz[0, :, :]
 
         nrg = subprocess.check_output(
             ["awk", "/Potential Energy/ {print $4}", "em.log"])  # get Potential energy from em.log
@@ -474,78 +472,78 @@ class Solvent(object):
 
         self.top.remove_residue(self.water_top, n, write=True)
 
-
-class Solute(object):
-
-    def __init__(self, name):
-
-        self.is_ion = False
-        # check if residue is an ion
-        with open('%s/../top/topologies/ions.txt' % script_location) as f:
-            ions = []
-            for line in f:
-                if line[0] != '#':
-                    ions.append(str.strip(line))
-
-        if name in ions:
-            self.is_ion = True
-            self.residues = [name]
-            self.names = [name]
-            self.xyz = np.zeros([1, 1, 3])
-            self.xyz[0, 0, :] = [0, 0, 0]
-            self.natoms = 1
-            self.mw = Atom_props.mass[name]
-            self.charge = Atom_props.charge[name]
-            self.resname = name
-        else:
-            try:
-                t = md.load('%s.pdb' % name, standard_names=False)  # see if there is a solute configuration in this directory
-            except OSError:
-                try:
-                    t = md.load('%s/../top/topologies/%s.pdb' % (script_location, name), standard_names=False)  # check if the configuration is
-                    # located with all of the other topologies
-                except OSError:
-                    print('No residue %s found' % name)
-                    exit()
-
-            try:
-                f = open('%s.itp' % name, 'r')
-            except FileNotFoundError:
-                try:
-                    f = open('%s/../top/topologies/%s.itp' % (script_location, name), 'r')
-                except FileNotFoundError:
-                    print('No topology %s.itp found' % name)
-
-            itp = []
-            for line in f:
-                itp.append(line)
-
-            f.close()
-
-            self.natoms = t.n_atoms
-
-            atoms_index = 0
-            while itp[atoms_index].count('[ atoms ]') == 0:
-                atoms_index += 1
-
-            atoms_index += 2
-            self.charge = 0
-            for i in range(self.natoms):
-                self.charge += float(itp[atoms_index + i].split()[6])
-
-            self.residues = [a.residue.name for a in t.topology.atoms]
-            self.resname = self.residues[0]
-            self.names = [a.name for a in t.topology.atoms]
-            self.xyz = t.xyz
-
-            self.mw = 0  # molecular weight (grams)
-            for a in t.topology.atoms:
-                self.mw += Atom_props.mass[a.name]
-
-            self.com = np.zeros([3])  # center of mass of solute
-            for i in range(self.xyz.shape[1]):
-                self.com += self.xyz[0, i, :] * Atom_props.mass[self.names[i]]
-            self.com /= self.mw
+# Revamped in llclib.topology
+# class Solute(object):
+#
+#     def __init__(self, name):
+#
+#         self.is_ion = False
+#         # check if residue is an ion
+#         with open('%s/../top/topologies/ions.txt' % script_location) as f:
+#             ions = []
+#             for line in f:
+#                 if line[0] != '#':
+#                     ions.append(str.strip(line))
+#
+#         if name in ions:
+#             self.is_ion = True
+#             self.residues = [name]
+#             self.names = [name]
+#             self.xyz = np.zeros([1, 1, 3])
+#             self.xyz[0, 0, :] = [0, 0, 0]
+#             self.natoms = 1
+#             self.mw = Atom_props.mass[name]
+#             self.charge = Atom_props.charge[name]
+#             self.resname = name
+#         else:
+#             try:
+#                 t = md.load('%s.pdb' % name, standard_names=False)  # see if there is a solute configuration in this directory
+#             except OSError:
+#                 try:
+#                     t = md.load('%s/../top/topologies/%s.pdb' % (script_location, name), standard_names=False)  # check if the configuration is
+#                     # located with all of the other topologies
+#                 except OSError:
+#                     print('No residue %s found' % name)
+#                     exit()
+#
+#             try:
+#                 f = open('%s.itp' % name, 'r')
+#             except FileNotFoundError:
+#                 try:
+#                     f = open('%s/../top/topologies/%s.itp' % (script_location, name), 'r')
+#                 except FileNotFoundError:
+#                     print('No topology %s.itp found' % name)
+#
+#             itp = []
+#             for line in f:
+#                 itp.append(line)
+#
+#             f.close()
+#
+#             self.natoms = t.n_atoms
+#
+#             atoms_index = 0
+#             while itp[atoms_index].count('[ atoms ]') == 0:
+#                 atoms_index += 1
+#
+#             atoms_index += 2
+#             self.charge = 0
+#             for i in range(self.natoms):
+#                 self.charge += float(itp[atoms_index + i].split()[6])
+#
+#             self.residues = [a.residue.name for a in t.topology.atoms]
+#             self.resname = self.residues[0]
+#             self.names = [a.name for a in t.topology.atoms]
+#             self.xyz = t.xyz
+#
+#             self.mw = 0  # molecular weight (grams)
+#             for a in t.topology.atoms:
+#                 self.mw += Atom_props.mass[a.name]
+#
+#             self.com = np.zeros([3])  # center of mass of solute
+#             for i in range(self.xyz.shape[1]):
+#                 self.com += self.xyz[0, i, :] * Atom_props.mass[self.names[i]]
+#             self.com /= self.mw
 
 
 if __name__ == "__main__":

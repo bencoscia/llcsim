@@ -3,6 +3,7 @@
 import os
 from llcsim.analysis import Atom_props
 import mdtraj as md
+import numpy as np
 
 location = os.path.realpath(os.path.join(os.getcwd(), os.path.dirname(__file__)))
 
@@ -53,13 +54,14 @@ class LC(object):
         self.full = a
         P = []
         P_ndx = []
-        L = []
+        L = np.zeros([2], dtype=int)
         C1 = []
         C2 = []
         C1_ndx = []
         C2_ndx = []
         I_ndx = []
         carb = []
+        PDA = []
         self.no_ions = 0
         self.ions = []
         self.MW = 0
@@ -86,8 +88,10 @@ class LC(object):
                     if 'P' in annotations:
                         P.append(str.strip(a[i][10:15]))
                         P_ndx.append(i - 2)
-                    if 'L' in annotations:
-                        L.append(i - 2)  # adjust for top lines and index (count from 0 rather than 1)
+                    if 'L1' in annotations:
+                        L[1] = i - 2
+                    if 'L2' in annotations:
+                        L[0] = i - 2
                     if 'R' in annotations:
                         self.ref_atom_index = i - 2
                     if 'C1' in annotations:
@@ -107,6 +111,8 @@ class LC(object):
                         benzene_carbons.append(str.strip(a[i][10:15]))
                     if 'C' in annotations:
                         carb.append(i - 2)
+                    if 'PDA' in annotations:
+                        PDA.append(str.strip(a[i][10:15]))
 
             nres.append(res_count)
 
@@ -167,6 +173,7 @@ class LC(object):
         self.benzene_carbons = benzene_carbons
         self.ion_indices = I_ndx
         self.carboxylate_indices = carb
+        self.pore_defining_atoms = PDA
 
     def get_index(self, name):
         """

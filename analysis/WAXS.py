@@ -176,7 +176,7 @@ ax.annotate('R-double', xy=(-.81, .906), xytext=(-.3, 0.72), arrowprops=dict(fac
 plt.xlabel('$q_z\ (\AA^{-1})$', fontsize=18)
 plt.ylabel('Normalized Intensity', fontsize=18)
 plt.tight_layout()
-plt.savefig('/home/bcoscia/PycharmProjects/llcsim/Ben_Manuscripts/structure_paper/figures/rpi_rdouble.pdf')
+#plt.savefig('/home/bcoscia/PycharmProjects/llcsim/Ben_Manuscripts/structure_paper/figures/rpi_rdouble.pdf')
 
 ################ Plot and fit lorentzian and gaussian functions to qr and qz experimental Cross-sections ##############
 
@@ -189,8 +189,8 @@ p = np.array([0.1, 0, 1, .1])
 solp_lorentz, cov_x_lorentz = curve_fit(lorentz, X, rsection, p)
 
 plt.plot(X, rsection, linewidth=2, color='xkcd:blue')
-plt.plot(X, gaussian(X, solp_gaussian[0], solp_gaussian[1], solp_gaussian[2], solp_gaussian[3]), '--', label='Gaussian Fit', linewidth=2)
-plt.plot(X, lorentz(X, solp_lorentz[0], solp_lorentz[1], solp_lorentz[2], solp_lorentz[3]), '--', color='xkcd:orange', label='Lorentzian Fit', linewidth=2)
+#plt.plot(X, gaussian(X, solp_gaussian[0], solp_gaussian[1], solp_gaussian[2], solp_gaussian[3]), '--', label='Gaussian Fit', linewidth=2)
+#plt.plot(X, lorentz(X, solp_lorentz[0], solp_lorentz[1], solp_lorentz[2], solp_lorentz[3]), '--', color='xkcd:orange', label='Lorentzian Fit', linewidth=2)
 plt.xlabel('$q_r\ (\AA^{-1}$)', fontsize=18)
 plt.ylabel('Intensity', fontsize=18)
 

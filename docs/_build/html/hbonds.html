@@ -1,0 +1,208 @@
+
+
+<!doctype html>
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>hbonds.py &#8212; llcsim 0.1.0 documentation</title>
+    
+    <link rel="stylesheet" href="_static/bizstyle.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '0.1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true,
+        SOURCELINK_SUFFIX: '.txt'
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.0/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/javascript" src="_static/bizstyle.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="prev" title="Post-Simulation Trajectory Analysis" href="analysis.html" />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <!--[if lt IE 9]>
+    <script type="text/javascript" src="_static/css3-mediaqueries.js"></script>
+    <![endif]-->
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="analysis.html" title="Post-Simulation Trajectory Analysis"
+             accesskey="P">previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">llcsim 0.1.0 documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="analysis.html" accesskey="U">Post-Simulation Trajectory Analysis</a> &#187;</li> 
+      </ul>
+    </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">hbonds.py</a><ul>
+<li><a class="reference internal" href="#Named Arguments">Named Arguments</a></li>
+<li><a class="reference internal" href="#classes">Classes</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="analysis.html"
+                        title="previous chapter">Post-Simulation Trajectory Analysis</a></p>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/hbonds.rst.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <div><input type="text" name="q" /></div>
+      <div><input type="submit" value="Go" /></div>
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <div class="section" id="hbonds-py">
+<h1>hbonds.py<a class="headerlink" href="#hbonds-py" title="Permalink to this headline">¶</a></h1>
+<p>Run Cylindricity script</p>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="n">usage</span><span class="p">:</span> <span class="n">hbonds</span><span class="o">.</span><span class="n">py</span> <span class="p">[</span><span class="o">-</span><span class="n">h</span><span class="p">]</span> <span class="p">[</span><span class="o">-</span><span class="n">t</span> <span class="n">TRAJ</span><span class="p">]</span> <span class="p">[</span><span class="o">-</span><span class="n">g</span> <span class="n">GRO</span><span class="p">]</span> <span class="p">[</span><span class="o">-</span><span class="n">p</span> <span class="n">TOP</span><span class="p">]</span> <span class="p">[</span><span class="o">-</span><span class="n">b</span> <span class="n">BEGIN</span><span class="p">]</span> <span class="p">[</span><span class="o">-</span><span class="n">e</span> <span class="n">END</span><span class="p">]</span> <span class="p">[</span><span class="o">-</span><span class="n">x</span><span class="p">]</span>
+                 <span class="p">[</span><span class="o">-</span><span class="n">r</span> <span class="n">RESIDUES</span> <span class="p">[</span><span class="n">RESIDUES</span> <span class="o">...</span><span class="p">]]</span> <span class="p">[</span><span class="o">-</span><span class="n">a</span> <span class="n">ATOMS</span> <span class="p">[</span><span class="n">ATOMS</span> <span class="o">...</span><span class="p">]]</span>
+                 <span class="p">[</span><span class="o">-</span><span class="n">d</span> <span class="n">DISTANCE</span><span class="p">]</span> <span class="p">[</span><span class="o">-</span><span class="n">angle</span> <span class="n">ANGLE_CUT</span><span class="p">]</span>
+</pre></div>
+</div>
+<div class="section" id="Named Arguments">
+<h2>Named Arguments<a class="headerlink" href="#Named Arguments" title="Permalink to this headline">¶</a></h2>
+<table class="docutils option-list" frame="void" rules="none">
+<col class="option" />
+<col class="description" />
+<tbody valign="top">
+<tr><td class="option-group">
+<kbd>-t, &#8211;traj</kbd></td>
+<td><p class="first">Path to input file</p>
+<p class="last">Default: &#8220;wiggle.trr&#8221;</p>
+</td></tr>
+<tr><td class="option-group">
+<kbd>-g, &#8211;gro</kbd></td>
+<td><p class="first">Coordinate file</p>
+<p class="last">Default: &#8220;wiggle.gro&#8221;</p>
+</td></tr>
+<tr><td class="option-group">
+<kbd>-p, &#8211;top</kbd></td>
+<td><p class="first">Gromacs topology file</p>
+<p class="last">Default: &#8220;topol.top&#8221;</p>
+</td></tr>
+<tr><td class="option-group">
+<kbd>-b, &#8211;begin</kbd></td>
+<td><p class="first">End frame</p>
+<p class="last">Default: 0</p>
+</td></tr>
+<tr><td class="option-group">
+<kbd>-e, &#8211;end</kbd></td>
+<td><p class="first">Start frame</p>
+<p class="last">Default: -1</p>
+</td></tr>
+<tr><td class="option-group" colspan="2">
+<kbd>-x, &#8211;exclude_water</kbd></td>
+</tr>
+<tr><td>&#160;</td><td><p class="first">Exclude water while searching for hbonds</p>
+<p class="last">Default: False</p>
+</td></tr>
+<tr><td class="option-group">
+<kbd>-r, &#8211;residues</kbd></td>
+<td><p class="first">Residues to include in h-bond search. Water is automatically included if you do not specify the -x option</p>
+<p class="last">Default: [&#8216;HII&#8217;]</p>
+</td></tr>
+<tr><td class="option-group">
+<kbd>-a, &#8211;atoms</kbd></td>
+<td>Atoms for to include for each residue. Each list of atoms must be passed with a separate -a flag for each residue inargs.residues</td></tr>
+<tr><td class="option-group">
+<kbd>-d, &#8211;distance</kbd></td>
+<td><p class="first">Maximum distance between acceptor and donor atoms</p>
+<p class="last">Default: 0.3</p>
+</td></tr>
+<tr><td class="option-group" colspan="2">
+<kbd>-angle, &#8211;angle_cut</kbd></td>
+</tr>
+<tr><td>&#160;</td><td><p class="first">Maximum DHA angle to be considered an H-bond</p>
+<p class="last">Default: 20</p>
+</td></tr>
+</tbody>
+</table>
+</div>
+<div class="section" id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Permalink to this headline">¶</a></h2>
+<dl class="class">
+<dt id="hbonds.System">
+<em class="property">class </em><code class="descclassname">hbonds.</code><code class="descname">System</code><span class="sig-paren">(</span><em>traj</em>, <em>gro</em>, <em>top</em>, <em>begin=0</em>, <em>end=-1</em>, <em>res='all'</em>, <em>exclude_water=False</em><span class="sig-paren">)</span><a class="headerlink" href="#hbonds.System" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="class">
+<dt id="hbonds.Residue">
+<em class="property">class </em><code class="descclassname">hbonds.</code><code class="descname">Residue</code><span class="sig-paren">(</span><em>name</em><span class="sig-paren">)</span><a class="headerlink" href="#hbonds.Residue" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="class">
+<dt id="hbonds.Topology">
+<em class="property">class </em><code class="descclassname">hbonds.</code><code class="descname">Topology</code><span class="sig-paren">(</span><em>top</em><span class="sig-paren">)</span><a class="headerlink" href="#hbonds.Topology" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="analysis.html" title="Post-Simulation Trajectory Analysis"
+             >previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">llcsim 0.1.0 documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="analysis.html" >Post-Simulation Trajectory Analysis</a> &#187;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2018, Benjamin Coscia.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.5.6.
+    </div>
+  </body>
+</html>

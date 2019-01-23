@@ -103,7 +103,7 @@ def compdensity(component, pore_centers, start, box, cut=1.5, pores=4, nbins=50,
     for t in tqdm.tqdm(range(start, nT)):
         for p in range(pores):
             # narrow down the positions to those that are within 'cut' of at least one pore
-            distances = np.linalg.norm(component[t, :, :2] - pore_centers[:, p, t], axis=1)
+            distances = np.linalg.norm(component[t, :, :2] - pore_centers[t, p, :], axis=1)
             d_sorted = np.sort(distances)
             # find where the distances exceed the cutoff
             stop = 0
@@ -249,7 +249,7 @@ if __name__ == "__main__":
         components = ['C', 'C1', 'C2', 'C3', 'C4', 'C5']
         comp = [a.index for a in t.topology.atoms if a.name in components]
 
-        p_centers = physical.avg_pore_loc(npores, t.xyz[:, comp, :])
+        p_centers = physical.avg_pore_loc(npores, t.xyz[:, comp, :], box)
 
         for i, reg in enumerate(regions):
 
